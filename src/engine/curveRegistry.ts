@@ -40,10 +40,16 @@ const utility = (params: CurveParams, xDomain: [number, number], samples = 60): 
 };
 
 const perfectlyInelastic = (params: CurveParams, xDomain: [number, number], samples = 60): [number, number][] => {
-  const { intercept = 6 } = params;
-  const [min, max] = xDomain;
-  const x = (min + max) / 2;
-  return Array.from({ length: samples }, () => [x, Math.min(Math.max(0, intercept), 12)] as [number, number]);
+  const [xMin, xMax] = xDomain;
+  const fixedQ = params.intercept ?? params.baseQ ?? (xMin + xMax) / 2;
+  const q = Math.min(Math.max(fixedQ, xMin), xMax);
+  const yMin = params.min ?? 0;
+  const yMax = params.max ?? 12;
+  const step = samples > 1 ? (yMax - yMin) / (samples - 1) : 0;
+  return Array.from({ length: samples }, (_, i) => {
+    const y = yMin + step * i;
+    return [q, y] as [number, number];
+  });
 };
 
 const inelastic = (params: CurveParams, xDomain: [number, number], samples = 60): [number, number][] => {
@@ -66,6 +72,11 @@ const elastic = (params: CurveParams, xDomain: [number, number], samples = 60): 
   return linear(params, xDomain, samples).map(([x, y]) => [x, Math.min(Math.max(0, y), 12)] as [number, number]);
 };
 
+/** Smooth curve defined by ordered Q–P control points (rendered with Catmull–Rom). */
+const throughPoints = (params: CurveParams, _xDomain?: [number, number], _samples?: number): [number, number][] => {
+  return (params.points ?? []).map((point) => [point.x, point.y] as [number, number]);
+};
+
 const perfectlyElastic = (params: CurveParams, xDomain: [number, number], samples = 60): [number, number][] => {
   const { intercept = 5 } = params;
   const [min, max] = xDomain;
@@ -77,6 +88,7 @@ const perfectlyElastic = (params: CurveParams, xDomain: [number, number], sample
 
 export const curveRegistry: Record<string, CurveGenerator> = {
   linear: { id: 'linear', label: 'Linear', generate: linear },
+  throughPoints: { id: 'throughPoints', label: 'Through points (smooth)', generate: throughPoints },
   demand: { id: 'demand', label: 'Demand', generate: demand },
   supply: { id: 'supply', label: 'Supply', generate: supply },
   utility: { id: 'utility', label: 'Utility', generate: utility },

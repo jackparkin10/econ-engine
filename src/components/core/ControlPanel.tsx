@@ -28,7 +28,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
 }) => {
   const [localValues, setLocalValues] = useState<Record<string, number | boolean>>(
     chapter.exploreControls?.reduce((acc, control) => {
-      acc[control.id] = control.defaultValue ?? (control.type === 'slider' ? 0 : false);
+      acc[control.targetKey] = control.defaultValue ?? (control.type === 'slider' ? 0 : false);
       return acc;
     }, {} as Record<string, number | boolean>) ?? {}
   );
@@ -127,12 +127,12 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                   {control.type === 'button' && (
                     <button
                       type="button"
-                      onClick={() => handleControlChange(control.id, !Boolean(controlValues[control.id]))}
+                      onClick={() => handleControlChange(control.targetKey, !Boolean(controlValues[control.targetKey]))}
                       className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
-                        controlValues[control.id] ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                        controlValues[control.targetKey] ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
                       }`}
                     >
-                      {controlValues[control.id] ? 'Hide' : 'Show'}
+                      {controlValues[control.targetKey] ? 'Hide' : 'Show'}
                     </button>
                   )}
                 </div>
@@ -143,9 +143,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                     min={control.min}
                     max={control.max}
                     step={control.step}
-                    value={Number(controlValues[control.id] ?? 0)}
+                    value={Number(controlValues[control.targetKey] ?? 0)}
                     onChange={(event) =>
-                      handleControlChange(control.id, Number(event.target.value))
+                      handleControlChange(control.targetKey, Number(event.target.value))
                     }
                     className="mt-2 w-full accent-slate-700"
                   />
@@ -153,9 +153,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                   <input
                     id={control.id}
                     type="checkbox"
-                    checked={Boolean(controlValues[control.id])}
+                    checked={Boolean(controlValues[control.targetKey])}
                     onChange={(event) =>
-                      handleControlChange(control.id, event.target.checked)
+                      handleControlChange(control.targetKey, event.target.checked)
                     }
                     className="mt-2 h-5 w-5 accent-slate-700"
                   />

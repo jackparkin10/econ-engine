@@ -1,9 +1,25 @@
 import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { ChapterConfig, StageMode, BuildStep } from '../../engine/types';
-import { createScales, curvePath, findEquilibrium } from '../../engine/graphEngine';
+import {
+  applyExploreBindings,
+  createScales,
+  curvePath,
+  findEquilibrium,
+  insertEquilibriumKnots,
+  resolveEquilibria,
+  type ResolvedEquilibrium,
+} from '../../engine/graphEngine';
+import {
+  formatAxisTick,
+  resolveChapterGraphStyle,
+  resolveCalloutFill,
+  resolveArrowStroke,
+  resolveEquilibriumColor,
+} from '../../engine/resolveGraphStyle';
 import { renderExploreIllustration } from '../../engine/strategies/supplyDemandStrategy';
 import { getElasticityScenario, calculateElasticityPoint } from '../../engine/strategies/elasticityStrategy';
+import { GraphArrow } from '../graph/graphArrow';
 
 interface GraphCanvasProps {
   chapter: ChapterConfig;
@@ -13,93 +29,212 @@ interface GraphCanvasProps {
 }
 
 const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activeStep, exploreValues }) => {
-  const width = 760;
-  const height = 420;
-  const margin = { top: 20, right: 20, bottom: 60, left: 60 };
+  const style = useMemo(() => resolveChapterGraphStyle(chapter, mode), [chapter, mode]);
+  const { layout, theme } = style;
+  const width = layout.width;
+  const height = layout.height;
+  const margin = layout.margin;
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
-  const scales = useMemo(() => createScales(chapter.xAxis, chapter.yAxis, innerWidth, innerHeight), [chapter, innerWidth, innerHeight]);
-  const xDomain: [number, number] = [chapter.xAxis.min, chapter.xAxis.max];
+  const plotExtent = layout.equalAxisLengths ? Math.min(innerWidth, innerHeight) : null;
+  const plotWidth = plotExtent ?? innerWidth;
+  const plotHeight = plotExtent ?? innerHeight;
+  const plotBottom = innerHeight;
+  const plotTop = plotBottom - plotHeight;
 
-  // Filter curves based on build step visibility or default visibility
-  const curves = useMemo(() => {
+  const scales = useMemo(
+    () => createScales(chapter.xAxis, chapter.yAxis, plotWidth, plotHeight),
+    [chapter.xAxis, chapter.yAxis, plotWidth, plotHeight]
+  );
+  const baseCurves = useMemo(() => {
+    if (mode === 'book' && chapter.bookLayers?.length) {
+      return chapter.curves.filter((curve) => chapter.bookLayers?.includes(curve.id));
+    }
     if (mode === 'build') {
       return activeStep?.visibleLayers
         ? chapter.curves.filter((curve) => activeStep.visibleLayers?.includes(curve.id))
         : [];
     }
+    if (mode === 'explore' && chapter.exploreLayers?.length) {
+      return chapter.curves.filter((curve) => chapter.exploreLayers?.includes(curve.id));
+    }
     return chapter.curves.filter((curve) => curve.visible !== false);
-  }, [chapter.curves, mode, activeStep]);
+  }, [chapter.curves, chapter.bookLayers, chapter.exploreLayers, mode, activeStep]);
 
-  const equilibrium = useMemo(
-    () => chapter.equilibriumPoint ?? findEquilibrium(curves),
-    [chapter.equilibriumPoint, curves]
-  );
-
-  // Supply-demand specific explore handling
   const showSurplus = mode === 'explore' && exploreValues?.surplus === true;
   const showShortage = mode === 'explore' && exploreValues?.shortage === true;
-  
+
+  const { displayCurves, equilibriaToRender } = useMemo(() => {
+    const boundCurves = applyExploreBindings(chapter, baseCurves, exploreValues);
+
+    if (showSurplus || showShortage) {
+      return { displayCurves: boundCurves, equilibriaToRender: [] as ResolvedEquilibrium[] };
+    }
+
+    let resolved: ResolvedEquilibrium[] = [];
+
+    if (chapter.equilibria?.length) {
+      if (mode === 'explore') {
+        resolved = resolveEquilibria(chapter, boundCurves);
+      } else if (mode === 'build' && activeStep?.showEquilibrium) {
+        const ids = activeStep.visibleEquilibria ?? chapter.equilibria.map((entry) => entry.id);
+        resolved = resolveEquilibria(chapter, boundCurves, ids);
+      }
+    } else {
+      const point = chapter.equilibriumPoint ?? findEquilibrium(boundCurves, chapter);
+      if (point) {
+        resolved = [{ id: 'default', point, color: style.resolveColor('equilibrium') }];
+      }
+    }
+
+    const equilibriaToRender = resolved.map((entry) => {
+      const spec = chapter.equilibria?.find((item) => item.id === entry.id);
+      return {
+        ...entry,
+        color: spec ? resolveEquilibriumColor(style, spec) : entry.color,
+      };
+    });
+
+    const knots = (chapter.equilibria ?? [])
+      .filter((spec) => equilibriaToRender.some((entry) => entry.id === spec.id))
+      .map((spec) => {
+        const equilibrium = equilibriaToRender.find((entry) => entry.id === spec.id);
+        if (!equilibrium) return null;
+        return {
+          demandCurveId: spec.demandCurveId,
+          supplyCurveId: spec.supplyCurveId,
+          point: { x: equilibrium.point.x, y: equilibrium.point.y },
+        };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+    const displayCurves = insertEquilibriumKnots(boundCurves, knots);
+
+    return { displayCurves, equilibriaToRender };
+  }, [
+    chapter,
+    baseCurves,
+    exploreValues,
+    mode,
+    activeStep,
+    showSurplus,
+    showShortage,
+    style,
+  ]);
+
+  const showEquilibriumGuides = mode !== 'build' || Boolean(activeStep?.showEquilibrium);
+  const showPriceLine = mode !== 'build' || Boolean(activeStep?.showPriceLine);
+  const showQuantityLine = mode !== 'build' || Boolean(activeStep?.showQuantityLine);
+
+  const visibleArrowIds = useMemo(() => {
+    if (mode === 'build' && activeStep?.visibleAnnotations?.length) {
+      return activeStep.visibleAnnotations;
+    }
+    if (mode === 'explore') {
+      return chapter.graphArrows?.map((arrow) => arrow.id) ?? [];
+    }
+    return [];
+  }, [mode, activeStep, chapter.graphArrows]);
+
   const supplyDemandExploreIllustration = useMemo(() => {
     if (chapter.graphType !== 'supply-demand') return null;
     if (!showSurplus && !showShortage) return null;
-    
+
     const scenario = chapter.exploreScenarios?.find(
       (s) => (showSurplus && s.id === 'surplus') || (showShortage && s.id === 'shortage')
     );
     if (!scenario) return null;
-    
+
     return renderExploreIllustration(scenario, chapter);
   }, [chapter, showSurplus, showShortage]);
 
-  // Elasticity specific explore handling
   const elasticityLevel = mode === 'explore' ? (exploreValues?.elasticity ?? 0) : -1;
   const showPriceChange = mode === 'explore' && exploreValues?.showPriceChange === true;
-  
+
   const elasticityExploreData = useMemo(() => {
     if (chapter.graphType !== 'elasticity' || (elasticityLevel as number) < 0) return null;
     const scenario = getElasticityScenario(elasticityLevel as number);
     return showPriceChange ? calculateElasticityPoint(scenario) : null;
   }, [chapter.graphType, elasticityLevel, showPriceChange]);
 
-  // Use all ticks if defined, otherwise generate 11 ticks
-  const xTicks = chapter.xAxis.ticks || Array.from({ length: 11 }, (_, i) => chapter.xAxis.min + (chapter.xAxis.max - chapter.xAxis.min) * i / 10);
-  const yTicks = chapter.yAxis.ticks || Array.from({ length: 11 }, (_, i) => chapter.yAxis.min + (chapter.yAxis.max - chapter.yAxis.min) * i / 10);
+  const xTicks =
+    chapter.xAxis.ticks ||
+    Array.from({ length: 11 }, (_, i) => chapter.xAxis.min + ((chapter.xAxis.max - chapter.xAxis.min) * i) / 10);
+  const yTicks =
+    chapter.yAxis.ticks ||
+    Array.from({ length: 11 }, (_, i) => chapter.yAxis.min + ((chapter.yAxis.max - chapter.yAxis.min) * i) / 10);
+
+  const formatTick = (value: number, axis: typeof chapter.xAxis) =>
+    axis.format ? axis.format(value) : formatAxisTick(value, axis.tickFormat);
+
+  const toPx = (point: { x: number; y: number }) => ({
+    x: scales.xScale(point.x),
+    y: scales.yScale(point.y),
+  });
+
+  const exploreAccent = style.resolveColor('explore');
 
   return (
-    <div className="relative">
-      <svg width={width} height={height} className="block w-full">
-        <rect width={width} height={height} fill="#ffffff" rx="28" />
+    <motion.div
+      className="relative"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+    >
+      <svg width={width} height={height} className="block w-full" style={{ fontFamily: theme.typography.fontFamily }}>
+        <rect
+          width={width}
+          height={height}
+          fill={layout.background}
+          rx={layout.borderRadius}
+        />
+        <defs>
+          <marker
+            id="graph-arrow-outline"
+            markerWidth={theme.arrow.headLength}
+            markerHeight={theme.arrow.headWidth}
+            refX={theme.arrow.headLength}
+            refY={theme.arrow.headWidth / 2}
+            orient="auto"
+          >
+            <polygon
+              points={`0 0, ${theme.arrow.headLength} ${theme.arrow.headWidth / 2}, 0 ${theme.arrow.headWidth}`}
+              fill={theme.arrow.outlineColor}
+            />
+          </marker>
+        </defs>
         <g transform={`translate(${margin.left}, ${margin.top})`}>
-          {/* Axes */}
-          <line x1={0} y1={0} x2={0} y2={innerHeight} stroke="#334155" strokeWidth={2} />
-          <line x1={0} y1={innerHeight} x2={innerWidth} y2={innerHeight} stroke="#334155" strokeWidth={2} />
-          
-          {/* X-axis ticks and labels */}
+          <line x1={0} y1={plotTop} x2={0} y2={plotBottom} stroke={theme.colors.axis} strokeWidth={2} />
+          <line
+            x1={0}
+            y1={plotBottom}
+            x2={plotWidth}
+            y2={plotBottom}
+            stroke={theme.colors.axis}
+            strokeWidth={2}
+          />
+
           {xTicks.map((tick) => (
             <g key={`xlabel-${tick}`}>
               <line
                 x1={scales.xScale(tick)}
-                y1={innerHeight}
+                y1={plotBottom}
                 x2={scales.xScale(tick)}
-                y2={innerHeight + 8}
-                stroke="#334155"
+                y2={plotBottom + 8}
+                stroke={theme.colors.axis}
                 strokeWidth={1}
               />
               <text
                 x={scales.xScale(tick)}
-                y={innerHeight + 25}
+                y={plotBottom + 22}
                 textAnchor="middle"
-                fontSize={12}
-                fill="#475569"
-                fontWeight="500"
+                {...style.tickStyle}
               >
-                {typeof tick === 'number' ? tick.toFixed(0) : tick}
+                {formatTick(tick, chapter.xAxis)}
               </text>
             </g>
           ))}
-          
-          {/* Y-axis ticks and labels */}
+
           {yTicks.map((tick) => (
             <g key={`ylabel-${tick}`}>
               <line
@@ -107,45 +242,63 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
                 y1={scales.yScale(tick)}
                 x2={0}
                 y2={scales.yScale(tick)}
-                stroke="#334155"
+                stroke={theme.colors.axis}
                 strokeWidth={1}
               />
               <text
-                x={-15}
+                x={-12}
                 y={scales.yScale(tick) + 4}
                 textAnchor="end"
-                fontSize={12}
-                fill="#475569"
-                fontWeight="500"
+                {...style.tickStyle}
               >
-                {typeof tick === 'number' ? tick.toFixed(0) : tick}
+                {formatTick(tick, chapter.yAxis)}
               </text>
             </g>
           ))}
 
-          {/* Curve paths */}
-          {curves.map((curve) => (
-            <motion.path
-              key={curve.id}
-              d={curvePath(curve, xDomain, scales)}
-              fill="none"
-              stroke={curve.color ?? '#0f172a'}
-              strokeWidth={3}
-              strokeLinecap="round"
-              initial={{ pathLength: 0 }}
-              animate={{ pathLength: 1 }}
-              transition={{ duration: curve.animated ? 1.4 : 0.3, ease: 'easeOut' }}
-            />
-          ))}
+          {displayCurves.map((curve) => {
+            const curveStyle = style.curves.get(curve.id);
+            if (!curveStyle) return null;
+            return (
+              <motion.path
+                key={curve.id}
+                d={curvePath(curve, chapter, scales)}
+                fill="none"
+                stroke={curveStyle.stroke}
+                strokeWidth={curveStyle.strokeWidth}
+                strokeLinecap={curveStyle.strokeLinecap}
+                strokeDasharray={curveStyle.strokeDasharray}
+                initial={{ pathLength: 0 }}
+                animate={{ pathLength: 1 }}
+                transition={{ duration: curveStyle.animated ? 1.4 : 0.3, ease: 'easeOut' }}
+              />
+            );
+          })}
+
+          {chapter.graphArrows
+            ?.filter((arrow) => visibleArrowIds.includes(arrow.id))
+            .map((arrow) => (
+              <GraphArrow
+                key={arrow.id}
+                arrow={arrow}
+                from={toPx(arrow.from)}
+                to={toPx(arrow.to)}
+                theme={theme}
+                fill={resolveArrowStroke(style, arrow)}
+                calloutFill={resolveCalloutFill(style, arrow)}
+                labelStyle={style.calloutStyle}
+                labelOffset={arrow.labelOffset ? toPx(arrow.labelOffset) : undefined}
+              />
+            ))}
 
           {supplyDemandExploreIllustration ? (
             <>
               <line
                 x1={0}
                 y1={scales.yScale(supplyDemandExploreIllustration.price)}
-                x2={innerWidth}
+                x2={plotWidth}
                 y2={scales.yScale(supplyDemandExploreIllustration.price)}
-                stroke="#475569"
+                stroke={theme.colors.axis}
                 strokeWidth={1}
                 strokeDasharray="4 4"
               />
@@ -153,52 +306,32 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
                 x1={scales.xScale(supplyDemandExploreIllustration.demand.x)}
                 y1={scales.yScale(supplyDemandExploreIllustration.demand.y)}
                 x2={scales.xScale(supplyDemandExploreIllustration.demand.x)}
-                y2={innerHeight}
-                stroke="#0f172a"
+                y2={plotBottom}
+                stroke={exploreAccent}
                 strokeWidth={1}
                 strokeDasharray="3 3"
               />
               <circle
                 cx={scales.xScale(supplyDemandExploreIllustration.demand.x)}
                 cy={scales.yScale(supplyDemandExploreIllustration.demand.y)}
-                r={6}
-                fill="#0f172a"
+                r={5}
+                fill={exploreAccent}
               />
-              <text
-                x={scales.xScale(supplyDemandExploreIllustration.demand.x) - 6}
-                y={scales.yScale(supplyDemandExploreIllustration.demand.y) - 10}
-                textAnchor="end"
-                fill="#0f172a"
-                fontSize={12}
-                fontWeight="700"
-              >
-                Qd
-              </text>
               <line
                 x1={scales.xScale(supplyDemandExploreIllustration.supply.x)}
                 y1={scales.yScale(supplyDemandExploreIllustration.supply.y)}
                 x2={scales.xScale(supplyDemandExploreIllustration.supply.x)}
-                y2={innerHeight}
-                stroke="#0f172a"
+                y2={plotBottom}
+                stroke={exploreAccent}
                 strokeWidth={1}
                 strokeDasharray="3 3"
               />
               <circle
                 cx={scales.xScale(supplyDemandExploreIllustration.supply.x)}
                 cy={scales.yScale(supplyDemandExploreIllustration.supply.y)}
-                r={6}
-                fill="#0f172a"
+                r={5}
+                fill={exploreAccent}
               />
-              <text
-                x={scales.xScale(supplyDemandExploreIllustration.supply.x) + 6}
-                y={scales.yScale(supplyDemandExploreIllustration.supply.y) - 10}
-                textAnchor="start"
-                fill="#0f172a"
-                fontSize={12}
-                fontWeight="700"
-              >
-                Qs
-              </text>
             </>
           ) : null}
 
@@ -207,113 +340,120 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
               <circle
                 cx={scales.xScale(elasticityExploreData.initialPoint.q)}
                 cy={scales.yScale(elasticityExploreData.initialPoint.p)}
-                r={6}
-                fill="#10b981"
+                r={5}
+                fill={style.resolveColor('demand')}
               />
-              <text
-                x={scales.xScale(elasticityExploreData.initialPoint.q) + 10}
-                y={scales.yScale(elasticityExploreData.initialPoint.p)}
-                textAnchor="start"
-                fill="#0f172a"
-                fontSize={12}
-                fontWeight="700"
-              >
-                Initial
-              </text>
               <line
                 x1={scales.xScale(elasticityExploreData.initialPoint.q)}
                 y1={scales.yScale(elasticityExploreData.initialPoint.p)}
                 x2={scales.xScale(elasticityExploreData.newPoint.q)}
                 y2={scales.yScale(elasticityExploreData.newPoint.p)}
-                stroke="#dc2626"
+                stroke={style.resolveColor('supplyInitial')}
                 strokeWidth={2}
                 strokeDasharray="4 4"
               />
               <circle
                 cx={scales.xScale(elasticityExploreData.newPoint.q)}
                 cy={scales.yScale(elasticityExploreData.newPoint.p)}
-                r={6}
-                fill="#dc2626"
+                r={5}
+                fill={style.resolveColor('supplyInitial')}
               />
+            </>
+          ) : null}
+
+          {chapter.curveLabels?.map((label) => {
+            const curveVisible = displayCurves.some((curve) => curve.id === label.curveId);
+            const showInBuild = mode === 'build' && activeStep?.visibleLayers?.includes(label.curveId);
+            const showInBook = mode === 'book' && curveVisible;
+            if (!showInBuild && !showInBook) return null;
+            return (
               <text
-                x={scales.xScale(elasticityExploreData.newPoint.q) + 10}
-                y={scales.yScale(elasticityExploreData.newPoint.p)}
-                textAnchor="start"
-                fill="#0f172a"
-                fontSize={12}
-                fontWeight="700"
+                key={label.curveId}
+                x={scales.xScale(label.x + (label.offsetX ?? 0))}
+                y={scales.yScale(label.y + (label.offsetY ?? 0))}
+                textAnchor={label.anchor ?? 'end'}
+                {...style.curveLabelStyle}
               >
-                New
+                {label.text}
               </text>
-            </>
-          ) : null}
+            );
+          })}
 
-          {mode === 'build' && activeStep ? (
-            <>
-              {chapter.curveLabels?.map((label) => 
-                activeStep.visibleLayers?.includes(label.curveId) ? (
-                  <text
-                    key={label.curveId}
-                    x={scales.xScale(label.x)}
-                    y={scales.yScale(label.y)}
-                    textAnchor={label.curveId === 'demand' ? 'end' : 'end'}
-                    fill="#0f172a"
-                    fontSize={14}
-                    fontWeight="700"
-                  >
-                    {label.text}
-                  </text>
-                ) : null
-              )}
-            </>
-          ) : null}
-
-          {/* Equilibrium visualization */}
-          {equilibrium && !showSurplus && !showShortage && (mode !== 'build' || activeStep?.showEquilibrium) ? (
-            <g>
-              <circle cx={scales.xScale(equilibrium.x)} cy={scales.yScale(equilibrium.y)} r={8} fill={chapter.themeColor} />
-              {mode !== 'build' || activeStep?.showPriceLine ? (
-                <line
-                  x1={0}
-                  y1={scales.yScale(equilibrium.y)}
-                  x2={scales.xScale(equilibrium.x)}
-                  y2={scales.yScale(equilibrium.y)}
-                  stroke={chapter.themeColor}
-                  strokeWidth={2}
-                  strokeDasharray="6 6"
-                />
-              ) : null}
-              {mode !== 'build' || activeStep?.showQuantityLine ? (
-                <line
-                  x1={scales.xScale(equilibrium.x)}
-                  y1={innerHeight}
-                  x2={scales.xScale(equilibrium.x)}
-                  y2={scales.yScale(equilibrium.y)}
-                  stroke={chapter.themeColor}
-                  strokeWidth={2}
-                  strokeDasharray="6 6"
-                />
-              ) : null}
-            </g>
-          ) : null}
+          {showEquilibriumGuides
+            ? equilibriaToRender.map((equilibrium) => (
+                <g key={equilibrium.id}>
+                  {theme.equilibrium.showPoints ? (
+                    <circle
+                      cx={scales.xScale(equilibrium.point.x)}
+                      cy={scales.yScale(equilibrium.point.y)}
+                      r={theme.equilibrium.pointRadius}
+                      fill={equilibrium.color ?? theme.equilibrium.pointFill}
+                      stroke={theme.equilibrium.pointStroke}
+                      strokeWidth={theme.equilibrium.pointStrokeWidth}
+                    />
+                  ) : null}
+                  {showPriceLine ? (
+                    <line
+                      x1={0}
+                      y1={scales.yScale(equilibrium.point.y)}
+                      x2={scales.xScale(equilibrium.point.x)}
+                      y2={scales.yScale(equilibrium.point.y)}
+                      stroke={equilibrium.color}
+                      strokeWidth={theme.equilibrium.guideStrokeWidth}
+                      strokeDasharray={theme.equilibrium.guideDasharray}
+                    />
+                  ) : null}
+                  {showQuantityLine ? (
+                    <line
+                      x1={scales.xScale(equilibrium.point.x)}
+                      y1={plotBottom}
+                      x2={scales.xScale(equilibrium.point.x)}
+                      y2={scales.yScale(equilibrium.point.y)}
+                      stroke={equilibrium.color}
+                      strokeWidth={theme.equilibrium.guideStrokeWidth}
+                      strokeDasharray={theme.equilibrium.guideDasharray}
+                    />
+                  ) : null}
+                </g>
+              ))
+            : null}
         </g>
-        {/* Axis labels */}
-        <text x={margin.left + innerWidth / 2} y={margin.top + innerHeight + 45} textAnchor="middle" fill="#475569" fontSize={14} fontWeight="600">
+
+        <text
+          x={margin.left + plotWidth / 2}
+          y={height - 18}
+          textAnchor="middle"
+          {...style.axisTitleStyle}
+        >
           {chapter.xAxis.label}
         </text>
-        <text
-          x={margin.left - 45}
-          y={margin.top + innerHeight / 2}
-          transform={`rotate(-90 ${margin.left - 45} ${margin.top + innerHeight / 2})`}
-          textAnchor="middle"
-          fill="#475569"
-          fontSize={14}
-          fontWeight="600"
-        >
-          {chapter.yAxis.label}
-        </text>
+        {chapter.yAxis.titleAboveMaxTick ? (
+          <text
+            x={margin.left + (chapter.yAxis.titleOffsetX ?? -8)}
+            y={margin.top + scales.yScale(chapter.yAxis.max) + (chapter.yAxis.titleOffsetY ?? -14)}
+            textAnchor="start"
+            transform={
+              chapter.yAxis.titleRotation
+                ? `rotate(${chapter.yAxis.titleRotation} ${margin.left + (chapter.yAxis.titleOffsetX ?? -8)} ${margin.top + scales.yScale(chapter.yAxis.max) + (chapter.yAxis.titleOffsetY ?? -14)})`
+                : undefined
+            }
+            {...style.axisTitleStyle}
+          >
+            {chapter.yAxis.label}
+          </text>
+        ) : (
+          <text
+            x={margin.left + (chapter.yAxis.titleOffsetX ?? 20)}
+            y={margin.top + plotTop + plotHeight / 2}
+            transform={`rotate(${chapter.yAxis.titleRotation ?? -90} ${margin.left + (chapter.yAxis.titleOffsetX ?? 20)} ${margin.top + plotTop + plotHeight / 2})`}
+            textAnchor="middle"
+            {...style.axisTitleStyle}
+          >
+            {chapter.yAxis.label}
+          </text>
+        )}
       </svg>
-    </div>
+    </motion.div>
   );
 };
 

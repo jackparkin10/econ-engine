@@ -10,12 +10,28 @@ export type GraphType =
 
 export type StageMode = 'book' | 'animate' | 'build' | 'explore';
 
+export type TickFormat = 'integer' | 'decimal-2' | 'auto';
+
 export interface AxisConfig {
   label: string;
   min: number;
   max: number;
   ticks?: number[];
+  tickFormat?: TickFormat;
   format?: (value: number) => string;
+  /** Label rotation in degrees (default: 0 for x, -90 for y). */
+  titleRotation?: number;
+  /** Place y-axis title just above the maximum tick (e.g. above “2”). */
+  titleAboveMaxTick?: boolean;
+  titleOffsetX?: number;
+  titleOffsetY?: number;
+}
+
+export interface CurvePoint {
+  /** Quantity (horizontal axis in standard chapters). */
+  x: number;
+  /** Price (vertical axis in standard chapters). */
+  y: number;
 }
 
 export interface CurveParams {
@@ -26,6 +42,13 @@ export interface CurveParams {
   min?: number;
   baseQ?: number;
   baseP?: number;
+  /** Control points for `throughPoints` curves (smooth, in Q–P space). */
+  points?: CurvePoint[];
+}
+
+export interface GraphCoordinatesConfig {
+  x: 'quantity' | 'price';
+  y: 'quantity' | 'price';
 }
 
 export interface CurveSpec {
@@ -33,10 +56,32 @@ export interface CurveSpec {
   label?: string;
   curveType: string; // registered curve generator key
   params: CurveParams;
+  /** Theme role key, e.g. "demand" or "supplyInitial" */
+  colorRole?: string;
+  /** Override color role per mode (e.g. book preview styling). */
+  colorRoleByMode?: Partial<Record<StageMode, string>>;
   color?: string;
   visible?: boolean;
   draggable?: boolean;
   animated?: boolean;
+  strokeDasharray?: string;
+}
+
+export interface EquilibriumSpec {
+  id: string;
+  demandCurveId: string;
+  supplyCurveId: string;
+  colorRole?: string;
+  color?: string;
+  label?: string;
+  /** Optional fixed equilibrium in Q–P space (used for non-linear curves). */
+  point?: CurvePoint;
+}
+
+export interface ExploreBinding {
+  targetKey: string;
+  curveId: string;
+  param: keyof CurveParams;
 }
 
 export interface AnnotationSpec {
@@ -54,8 +99,36 @@ export interface BuildStep {
   visibleLayers?: string[];
   activeControls?: string[];
   showEquilibrium?: boolean;
+  visibleEquilibria?: string[];
+  visibleAnnotations?: string[];
   showPriceLine?: boolean;
   showQuantityLine?: boolean;
+}
+
+export interface GraphPoint {
+  x: number;
+  y: number;
+}
+
+export interface GraphArrowSpec {
+  id: string;
+  from: GraphPoint;
+  to: GraphPoint;
+  label: string;
+  calloutColorRole?: string;
+  calloutColor?: string;
+  strokeColorRole?: string;
+  strokeColor?: string;
+  labelOffset?: GraphPoint;
+}
+
+export interface GraphCalloutSpec {
+  id: string;
+  x: number;
+  y: number;
+  label: string;
+  calloutColorRole?: string;
+  calloutColor?: string;
 }
 
 export interface ExploreControl {
@@ -84,6 +157,10 @@ export interface CurveLabel {
   text: string;
   x: number;
   y: number;
+  anchor?: 'start' | 'middle' | 'end';
+  /** Extra offset in Q–P space after anchor positioning. */
+  offsetX?: number;
+  offsetY?: number;
 }
 
 export interface ExploreScenario {
@@ -105,19 +182,37 @@ export interface ChapterConfig {
   title: string;
   description: string;
   themeColor: string;
+  /** Registered graph theme id (see config/graphThemes). */
+  graphThemeId?: string;
+  /** Maps plot axes to economic variables. Default: x=quantity, y=price. */
+  graphCoordinates?: GraphCoordinatesConfig;
+  /** Curves shown in book mode (defaults to curves with visible !== false). */
+  bookLayers?: string[];
+  graphLayout?: {
+    width?: number;
+    height?: number;
+    margin?: { top?: number; right?: number; bottom?: number; left?: number };
+    background?: string;
+    borderRadius?: number;
+    equalAxisLengths?: boolean;
+  };
   graphType: GraphType;
   showTable: boolean;
   tablePosition: 'left' | 'right' | 'none';
   xAxis: AxisConfig;
   yAxis: AxisConfig;
   curves: CurveSpec[];
+  equilibria?: EquilibriumSpec[];
   equilibriumPoint?: { x: number; y: number };
+  exploreBindings?: ExploreBinding[];
+  exploreLayers?: string[];
   annotations?: AnnotationSpec[];
   buildSteps?: BuildStep[];
   animationSteps?: AnimationStep[];
   exploreControls?: ExploreControl[];
   exploreScenarios?: ExploreScenario[];
   curveLabels?: CurveLabel[];
+  graphArrows?: GraphArrowSpec[];
   modeContent?: ModeContent;
   dataRows?: Record<string, string | number>[];
   mediaUrl?: string;
