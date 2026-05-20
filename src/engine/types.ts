@@ -64,6 +64,8 @@ export interface CurveSpec {
   visible?: boolean;
   draggable?: boolean;
   animated?: boolean;
+  /** In build, slide in from another curve’s shape when this layer appears (source stays visible). */
+  morphFromCurveId?: string;
   strokeDasharray?: string;
 }
 
@@ -110,6 +112,13 @@ export interface GraphPoint {
   y: number;
 }
 
+export interface GraphArrowStrokeGradient {
+  fromColorRole?: string;
+  toColorRole?: string;
+  fromColor?: string;
+  toColor?: string;
+}
+
 export interface GraphArrowSpec {
   id: string;
   from: GraphPoint;
@@ -119,7 +128,12 @@ export interface GraphArrowSpec {
   calloutColor?: string;
   strokeColorRole?: string;
   strokeColor?: string;
+  strokeGradient?: GraphArrowStrokeGradient;
   labelOffset?: GraphPoint;
+  /** Multiplier for arrow shaft/head thickness (default 1). */
+  thicknessScale?: number;
+  /** Bend the arrow along an existing chapter curve between `from` and `to`. */
+  followCurveId?: string;
 }
 
 export interface GraphCalloutSpec {
@@ -177,6 +191,12 @@ export interface ModeContent {
   animate?: string;
 }
 
+/** Static textbook figure shown in Book mode (see src/assets/chapters/<chapter-id>/). */
+export interface ChapterBookView {
+  imageSrc: string;
+  alt?: string;
+}
+
 export interface ChapterConfig {
   id: string;
   title: string;
@@ -186,8 +206,12 @@ export interface ChapterConfig {
   graphThemeId?: string;
   /** Maps plot axes to economic variables. Default: x=quantity, y=price. */
   graphCoordinates?: GraphCoordinatesConfig;
-  /** Curves shown in book mode (defaults to curves with visible !== false). */
+  /** Curves shown in book mode when `bookBuildStepId` is not set. */
   bookLayers?: string[];
+  /** Book mode mirrors this build step’s graph state (layers, equilibria, arrows). */
+  bookBuildStepId?: string;
+  /** Replaces the live graph in Book mode with a static figure. */
+  bookView?: ChapterBookView;
   graphLayout?: {
     width?: number;
     height?: number;

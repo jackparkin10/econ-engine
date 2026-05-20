@@ -58,10 +58,10 @@ export const legacyGraphTheme: GraphThemeConfig = {
   },
   arrow: {
     outlineColor: '#0f172a',
-    outlineWidth: 2.5,
-    shaftWidth: 1.5,
+    outlineWidth: 3.75,
+    shaftWidth: 2.25,
     headLength: 10,
-    headWidth: 8,
+    headWidth: 12,
   },
   callout: {
     paddingX: 6,

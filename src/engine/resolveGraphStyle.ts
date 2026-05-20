@@ -9,6 +9,11 @@ import {
   StageMode,
 } from './types';
 
+export interface ResolvedArrowGradient {
+  from: string;
+  to: string;
+}
+
 export interface ResolvedTextStyle extends TextStyle {
   fontFamily: string;
 }
@@ -129,6 +134,20 @@ export const resolveArrowStroke = (
   if (arrow.strokeColor) return arrow.strokeColor;
   if (arrow.strokeColorRole) return style.resolveColor(arrow.strokeColorRole);
   return style.resolveColor('demand');
+};
+
+export const resolveArrowGradient = (
+  style: ResolvedChapterGraphStyle,
+  arrow: GraphArrowSpec
+): ResolvedArrowGradient | undefined => {
+  const gradient = arrow.strokeGradient;
+  if (!gradient) return undefined;
+  const from =
+    gradient.fromColor ?? (gradient.fromColorRole ? style.resolveColor(gradient.fromColorRole) : undefined);
+  const to =
+    gradient.toColor ?? (gradient.toColorRole ? style.resolveColor(gradient.toColorRole) : undefined);
+  if (!from || !to) return undefined;
+  return { from, to };
 };
 
 export type TickFormat = 'integer' | 'decimal-2' | 'auto';

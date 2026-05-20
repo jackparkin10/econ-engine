@@ -1,20 +1,23 @@
-import React, { useMemo } from 'react';
-import { motion } from 'framer-motion';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { animate, motion } from 'framer-motion';
 import { ChapterConfig, StageMode, BuildStep } from '../../engine/types';
 import {
   applyExploreBindings,
+  buildCurvedArrowGeometry,
   createScales,
   curvePath,
   findEquilibrium,
   insertEquilibriumKnots,
+  interpolateCurvePoints,
   resolveEquilibria,
   type ResolvedEquilibrium,
 } from '../../engine/graphEngine';
 import {
   formatAxisTick,
   resolveChapterGraphStyle,
-  resolveCalloutFill,
+  resolveArrowGradient,
   resolveArrowStroke,
+  resolveCalloutFill,
   resolveEquilibriumColor,
 } from '../../engine/resolveGraphStyle';
 import { renderExploreIllustration } from '../../engine/strategies/supplyDemandStrategy';
@@ -28,7 +31,23 @@ interface GraphCanvasProps {
   exploreValues?: Record<string, number | boolean>;
 }
 
+const ELASTICITY_CURVE_BY_LEVEL = [
+  'perfectly-inelastic',
+  'inelastic',
+  'unit-elastic',
+  'elastic',
+  'perfectly-elastic',
+] as const;
+
 const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activeStep, exploreValues }) => {
+  const bookStep = useMemo(() => {
+    if (!chapter.bookBuildStepId) return undefined;
+    return chapter.buildSteps?.find((step) => step.id === chapter.bookBuildStepId);
+  }, [chapter.bookBuildStepId, chapter.buildSteps]);
+
+  const stepSnapshot = mode === 'book' ? bookStep : mode === 'build' ? activeStep : undefined;
+  const usesStepSnapshot = Boolean(stepSnapshot) && (mode === 'book' || mode === 'build');
+
   const style = useMemo(() => resolveChapterGraphStyle(chapter, mode), [chapter, mode]);
   const { layout, theme } = style;
   const width = layout.width;
@@ -47,19 +66,36 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
     [chapter.xAxis, chapter.yAxis, plotWidth, plotHeight]
   );
   const baseCurves = useMemo(() => {
+    if (mode === 'build' && activeStep === undefined) {
+      return [];
+    }
+    if (usesStepSnapshot && stepSnapshot) {
+      const layers = stepSnapshot.visibleLayers ?? [];
+      return chapter.curves.filter((curve) => layers.includes(curve.id));
+    }
     if (mode === 'book' && chapter.bookLayers?.length) {
       return chapter.curves.filter((curve) => chapter.bookLayers?.includes(curve.id));
     }
-    if (mode === 'build') {
-      return activeStep?.visibleLayers
-        ? chapter.curves.filter((curve) => activeStep.visibleLayers?.includes(curve.id))
-        : [];
+    if (mode === 'explore' && chapter.graphType === 'elasticity') {
+      const level = Math.round(Number(exploreValues?.elasticity ?? 0));
+      const curveId = ELASTICITY_CURVE_BY_LEVEL[Math.max(0, Math.min(4, level))];
+      return chapter.curves.filter((curve) => curve.id === curveId);
     }
     if (mode === 'explore' && chapter.exploreLayers?.length) {
       return chapter.curves.filter((curve) => chapter.exploreLayers?.includes(curve.id));
     }
     return chapter.curves.filter((curve) => curve.visible !== false);
-  }, [chapter.curves, chapter.bookLayers, chapter.exploreLayers, mode, activeStep]);
+  }, [
+    chapter.curves,
+    chapter.bookLayers,
+    chapter.exploreLayers,
+    chapter.graphType,
+    mode,
+    usesStepSnapshot,
+    stepSnapshot,
+    activeStep,
+    exploreValues?.elasticity,
+  ]);
 
   const showSurplus = mode === 'explore' && exploreValues?.surplus === true;
   const showShortage = mode === 'explore' && exploreValues?.shortage === true;
@@ -76,8 +112,8 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
     if (chapter.equilibria?.length) {
       if (mode === 'explore') {
         resolved = resolveEquilibria(chapter, boundCurves);
-      } else if (mode === 'build' && activeStep?.showEquilibrium) {
-        const ids = activeStep.visibleEquilibria ?? chapter.equilibria.map((entry) => entry.id);
+      } else if (usesStepSnapshot && stepSnapshot?.showEquilibrium) {
+        const ids = stepSnapshot.visibleEquilibria ?? chapter.equilibria.map((entry) => entry.id);
         resolved = resolveEquilibria(chapter, boundCurves, ids);
       }
     } else {
@@ -116,25 +152,28 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
     baseCurves,
     exploreValues,
     mode,
-    activeStep,
+    usesStepSnapshot,
+    stepSnapshot,
     showSurplus,
     showShortage,
     style,
   ]);
 
-  const showEquilibriumGuides = mode !== 'build' || Boolean(activeStep?.showEquilibrium);
-  const showPriceLine = mode !== 'build' || Boolean(activeStep?.showPriceLine);
-  const showQuantityLine = mode !== 'build' || Boolean(activeStep?.showQuantityLine);
+  const showEquilibriumGuides =
+    (mode !== 'build' && mode !== 'book') || Boolean(stepSnapshot?.showEquilibrium);
+  const showPriceLine = (mode !== 'build' && mode !== 'book') || Boolean(stepSnapshot?.showPriceLine);
+  const showQuantityLine =
+    (mode !== 'build' && mode !== 'book') || Boolean(stepSnapshot?.showQuantityLine);
 
   const visibleArrowIds = useMemo(() => {
-    if (mode === 'build' && activeStep?.visibleAnnotations?.length) {
-      return activeStep.visibleAnnotations;
+    if (usesStepSnapshot && stepSnapshot?.visibleAnnotations?.length) {
+      return stepSnapshot.visibleAnnotations;
     }
     if (mode === 'explore') {
       return chapter.graphArrows?.map((arrow) => arrow.id) ?? [];
     }
     return [];
-  }, [mode, activeStep, chapter.graphArrows]);
+  }, [mode, usesStepSnapshot, stepSnapshot, chapter.graphArrows]);
 
   const supplyDemandExploreIllustration = useMemo(() => {
     if (chapter.graphType !== 'supply-demand') return null;
@@ -173,6 +212,63 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
   });
 
   const exploreAccent = style.resolveColor('explore');
+
+  const morphPairs = useMemo(
+    () =>
+      chapter.curves
+        .filter((curve) => curve.morphFromCurveId)
+        .map((target) => ({
+          target,
+          source: chapter.curves.find((curve) => curve.id === target.morphFromCurveId),
+        }))
+        .filter((pair): pair is { source: (typeof chapter.curves)[0]; target: (typeof chapter.curves)[0] } =>
+          Boolean(pair.source)
+        ),
+    [chapter.curves]
+  );
+
+  const activeMorph = useMemo(() => {
+    if (mode !== 'build' || !activeStep) return null;
+    return (
+      morphPairs.find(
+        (pair) =>
+          activeStep.visibleLayers?.includes(pair.source.id) &&
+          activeStep.visibleLayers?.includes(pair.target.id)
+      ) ?? null
+    );
+  }, [mode, activeStep, morphPairs]);
+
+  const [morphProgress, setMorphProgress] = useState(1);
+  const previousBuildStep = useRef<BuildStep | undefined>();
+
+  useEffect(() => {
+    if (!activeMorph || mode !== 'build') {
+      setMorphProgress(1);
+      previousBuildStep.current = activeStep;
+      return;
+    }
+
+    const targetId = activeMorph.target.id;
+    const hadTarget = previousBuildStep.current?.visibleLayers?.includes(targetId);
+    const hasTarget = activeStep?.visibleLayers?.includes(targetId);
+    previousBuildStep.current = activeStep;
+
+    if (!hasTarget) {
+      setMorphProgress(1);
+      return;
+    }
+    if (hadTarget) {
+      return;
+    }
+
+    setMorphProgress(0);
+    const controls = animate(0, 1, {
+      duration: 1.4,
+      ease: 'easeOut',
+      onUpdate: setMorphProgress,
+    });
+    return () => controls.stop();
+  }, [activeMorph, activeStep, mode]);
 
   return (
     <motion.div
@@ -259,37 +355,78 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
           {displayCurves.map((curve) => {
             const curveStyle = style.curves.get(curve.id);
             if (!curveStyle) return null;
+
+            const isSlidingIn =
+              activeMorph &&
+              curve.id === activeMorph.target.id &&
+              morphProgress < 1 &&
+              activeMorph.source.params.points &&
+              curve.params.points;
+
+            const renderCurve = isSlidingIn
+              ? {
+                  ...curve,
+                  params: {
+                    ...curve.params,
+                    points: interpolateCurvePoints(
+                      activeMorph.source.params.points ?? [],
+                      curve.params.points ?? [],
+                      morphProgress
+                    ),
+                  },
+                }
+              : curve;
+
+            const useDrawAnimation =
+              Boolean(curveStyle.animated) &&
+              !(activeMorph && curve.id === activeMorph.target.id);
+
             return (
               <motion.path
-                key={curve.id}
-                d={curvePath(curve, chapter, scales)}
+                key={isSlidingIn ? `${curve.id}-slide` : curve.id}
+                d={curvePath(renderCurve, chapter, scales)}
                 fill="none"
                 stroke={curveStyle.stroke}
                 strokeWidth={curveStyle.strokeWidth}
                 strokeLinecap={curveStyle.strokeLinecap}
                 strokeDasharray={curveStyle.strokeDasharray}
-                initial={{ pathLength: 0 }}
+                initial={{ pathLength: useDrawAnimation ? 0 : 1 }}
                 animate={{ pathLength: 1 }}
-                transition={{ duration: curveStyle.animated ? 1.4 : 0.3, ease: 'easeOut' }}
+                transition={{ duration: useDrawAnimation ? 1.4 : 0.3, ease: 'easeOut' }}
               />
             );
           })}
 
           {chapter.graphArrows
             ?.filter((arrow) => visibleArrowIds.includes(arrow.id))
-            .map((arrow) => (
-              <GraphArrow
-                key={arrow.id}
-                arrow={arrow}
-                from={toPx(arrow.from)}
-                to={toPx(arrow.to)}
-                theme={theme}
-                fill={resolveArrowStroke(style, arrow)}
-                calloutFill={resolveCalloutFill(style, arrow)}
-                labelStyle={style.calloutStyle}
-                labelOffset={arrow.labelOffset ? toPx(arrow.labelOffset) : undefined}
-              />
-            ))}
+            .map((arrow) => {
+              const curved =
+                arrow.followCurveId
+                  ? buildCurvedArrowGeometry(
+                      chapter,
+                      arrow.followCurveId,
+                      arrow.from,
+                      arrow.to,
+                      scales
+                    )
+                  : null;
+
+              return (
+                <GraphArrow
+                  key={arrow.id}
+                  arrow={arrow}
+                  from={toPx(arrow.from)}
+                  to={toPx(arrow.to)}
+                  curved={curved ?? undefined}
+                  theme={theme}
+                  fill={resolveArrowStroke(style, arrow)}
+                  strokeGradient={resolveArrowGradient(style, arrow)}
+                  calloutFill={resolveCalloutFill(style, arrow)}
+                  labelStyle={style.calloutStyle}
+                  labelOffset={arrow.labelOffset ? toPx(arrow.labelOffset) : undefined}
+                />
+              );
+            })}
 
           {supplyDemandExploreIllustration ? (
             <>
@@ -362,10 +499,11 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
           ) : null}
 
           {chapter.curveLabels?.map((label) => {
-            const curveVisible = displayCurves.some((curve) => curve.id === label.curveId);
-            const showInBuild = mode === 'build' && activeStep?.visibleLayers?.includes(label.curveId);
-            const showInBook = mode === 'book' && curveVisible;
-            if (!showInBuild && !showInBook) return null;
+            const showOnStep =
+              usesStepSnapshot && stepSnapshot?.visibleLayers?.includes(label.curveId);
+            const hideDuringMorph =
+              activeMorph && morphProgress < 1 && label.curveId === activeMorph.target.id;
+            if (!showOnStep || hideDuringMorph) return null;
             return (
               <text
                 key={label.curveId}

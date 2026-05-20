@@ -20,7 +20,7 @@ export const textbookGraphTheme: GraphThemeConfig = {
     axisTitle: 'bold',
     tick: 'book',
     curveLabel: 'bold',
-    callout: 'bold',
+    callout: 'book',
   },
   colors: {
     axis: '#000000',
@@ -43,10 +43,12 @@ export const textbookGraphTheme: GraphThemeConfig = {
     callouts: {
       /** Cream callout box fill (RGB 255, 239, 207) */
       calloutCream: '#FFEFCF',
-      supplyIncreases: '#BADAF3',
-      priceFalls: '#FFEFCF',
+      /** RGB 196, 226, 202 */
       quantityIncreases: '#C4E2CA',
-      quantityDemandedIncreases: '#EBC6DE',
+      /** RGB 235, 198, 222 */
+      priceFalls: '#EBC6DE',
+      /** RGB 186, 218, 243 */
+      quantityDemandedIncreases: '#BADAF3',
     },
   },
   curves: {
@@ -65,17 +67,24 @@ export const textbookGraphTheme: GraphThemeConfig = {
   },
   arrow: {
     outlineColor: '#1a1a1a',
-    outlineWidth: 3,
-    shaftWidth: 2,
+    outlineWidth: 4.5,
+    shaftWidth: 3,
     headLength: 11,
-    headWidth: 9,
+    headWidth: 13.5,
+    fillOpacity: 0.82,
+    borderWidth: 1.25,
   },
   callout: {
     paddingX: 8,
     paddingY: 5,
     borderRadius: 0,
     borderColor: '#1a1a1a',
-    borderWidth: 1,
+    borderWidth: 0,
+    shadow: {
+      offsetX: 1.5,
+      offsetY: 1.5,
+      color: '#A8A8A8',
+    },
     textAlign: 'left',
   },
 };

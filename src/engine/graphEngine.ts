@@ -1,8 +1,8 @@
 import { line, curveCatmullRom, curveLinear } from 'd3-shape';
 import { scaleLinear, type ScaleLinear } from 'd3-scale';
-import { AxisConfig, ChapterConfig, CurveSpec } from './types';
+import { AxisConfig, ChapterConfig, CurvePoint, CurveSpec, GraphPoint } from './types';
 import { generateEconomicCurvePoints, toPlotPoint } from './graphCoordinates';
-import { findThroughPointsIntersection, insertEquilibriumKnots } from './curveIntersection';
+import { findThroughPointsIntersection, insertEquilibriumKnots, sampleCatmullRom } from './curveIntersection';
 
 export { insertEquilibriumKnots };
 
@@ -15,6 +15,96 @@ export const createScales = (xAxis: AxisConfig, yAxis: AxisConfig, width: number
   const xScale = scaleLinear().domain([xAxis.min, xAxis.max]).range([0, width]);
   const yScale = scaleLinear().domain([yAxis.min, yAxis.max]).range([height, 0]);
   return { xScale, yScale };
+};
+
+export const interpolateCurvePoints = (
+  from: CurvePoint[],
+  to: CurvePoint[],
+  t: number
+): CurvePoint[] => {
+  const count = Math.min(from.length, to.length);
+  return Array.from({ length: count }, (_, index) => ({
+    x: from[index].x + t * (to[index].x - from[index].x),
+    y: from[index].y + t * (to[index].y - from[index].y),
+  }));
+};
+
+export interface CurvedArrowGeometry {
+  shaftPath: string;
+  headFrom: GraphPoint;
+  headTo: GraphPoint;
+}
+
+const sampleCurveEconomicPoints = (curve: CurveSpec, chapter: ChapterConfig): Array<[number, number]> => {
+  if (curve.curveType === 'throughPoints' && curve.params.points?.length) {
+    return sampleCatmullRom(
+      curve.params.points.map((point) => ({ x: point.x, y: point.y })),
+      20
+    ).map((point) => [point.x, point.y] as [number, number]);
+  }
+  return generateEconomicCurvePoints(curve, chapter, 80);
+};
+
+const closestEconomicIndex = (points: Array<[number, number]>, target: GraphPoint) => {
+  let index = 0;
+  let best = Infinity;
+  for (let i = 0; i < points.length; i++) {
+    const distance = (points[i][0] - target.x) ** 2 + (points[i][1] - target.y) ** 2;
+    if (distance < best) {
+      best = distance;
+      index = i;
+    }
+  }
+  return index;
+};
+
+export const buildCurvedArrowGeometry = (
+  chapter: ChapterConfig,
+  curveId: string,
+  from: GraphPoint,
+  to: GraphPoint,
+  scales: CoordinateScale
+): CurvedArrowGeometry | null => {
+  const curve = chapter.curves.find((entry) => entry.id === curveId);
+  if (!curve) return null;
+
+  const economic = sampleCurveEconomicPoints(curve, chapter);
+  if (economic.length < 2) return null;
+
+  const fromIdx = closestEconomicIndex(economic, from);
+  const toIdx = closestEconomicIndex(economic, to);
+  let segment =
+    fromIdx <= toIdx ? economic.slice(fromIdx, toIdx + 1) : economic.slice(toIdx, fromIdx + 1).reverse();
+
+  if (segment.length < 2) {
+    segment = [
+      [from.x, from.y],
+      [to.x, to.y],
+    ];
+  } else {
+    segment[0] = [from.x, from.y];
+    segment[segment.length - 1] = [to.x, to.y];
+  }
+
+  const pixelPoints = segment.map(([quantity, price]) => {
+    const [plotX, plotY] = toPlotPoint(quantity, price, chapter);
+    return [scales.xScale(plotX), scales.yScale(plotY)] as [number, number];
+  });
+
+  const pathGenerator = line<[number, number]>()
+    .x(([x]) => x)
+    .y(([, y]) => y)
+    .curve(curveCatmullRom.alpha(0.75));
+
+  const shaftPath = pathGenerator(pixelPoints) ?? '';
+  const last = pixelPoints[pixelPoints.length - 1];
+  const prev = pixelPoints[pixelPoints.length - 2];
+
+  return {
+    shaftPath,
+    headFrom: { x: prev[0], y: prev[1] },
+    headTo: { x: last[0], y: last[1] },
+  };
 };
 
 export const curvePath = (curve: CurveSpec, chapter: ChapterConfig, scales: CoordinateScale) => {

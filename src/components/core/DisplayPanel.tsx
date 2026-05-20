@@ -21,4 +21,5 @@ const DisplayPanel: React.FC<DisplayPanelProps> = ({ chapter, mode, activeStep, 
   );
 };
 
+
 export default DisplayPanel;

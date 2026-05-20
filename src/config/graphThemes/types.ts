@@ -54,6 +54,9 @@ export interface GraphThemeConfig {
     shaftWidth: number;
     headLength: number;
     headWidth: number;
+    /** Unified arrow body fill (0–1). Stroke uses full opacity. */
+    fillOpacity?: number;
+    borderWidth?: number;
   };
   callout: {
     paddingX: number;
@@ -61,6 +64,12 @@ export interface GraphThemeConfig {
     borderRadius: number;
     borderColor: string;
     borderWidth: number;
+    /** Offset shadow layer up/left behind the box (light from upper-left). */
+    shadow?: {
+      offsetX: number;
+      offsetY: number;
+      color: string;
+    };
     textAlign: 'left' | 'center';
   };
 }
