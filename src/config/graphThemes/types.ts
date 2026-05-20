@@ -1,4 +1,4 @@
-export type TextStyleRole = 'book' | 'bold' | 'boldItalic';
+export type TextStyleRole = 'book' | 'axisTick' | 'bold' | 'italic' | 'boldItalic';
 
 export interface TextStyle {
   fontSize: number;
@@ -60,7 +60,14 @@ export interface GraphThemeConfig {
   };
   callout: {
     paddingX: number;
+    /** Per-side overrides; default to paddingX / paddingY when omitted. */
+    paddingLeft?: number;
+    paddingRight?: number;
     paddingY: number;
+    paddingTop?: number;
+    paddingBottom?: number;
+    /** Unitless multiplier on callout font size (e.g. 1.2). */
+    lineHeight?: number;
     borderRadius: number;
     borderColor: string;
     borderWidth: number;
@@ -71,5 +78,10 @@ export interface GraphThemeConfig {
       color: string;
     };
     textAlign: 'left' | 'center';
+    /** Thin line from callout edge (toward arrow mid) to arrow outline; drawn beneath arrows and box. */
+    connector?: {
+      stroke: string;
+      strokeWidth: number;
+    };
   };
 }

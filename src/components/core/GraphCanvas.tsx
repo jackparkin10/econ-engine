@@ -407,7 +407,8 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
                       arrow.followCurveId,
                       arrow.from,
                       arrow.to,
-                      scales
+                      scales,
+                      displayCurves
                     )
                   : null;
 

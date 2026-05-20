@@ -14,7 +14,9 @@ export const legacyGraphTheme: GraphThemeConfig = {
     fontFamily: 'system-ui, sans-serif',
     roles: {
       book: { fontSize: 12, fontWeight: 500, fontStyle: 'normal' },
+      axisTick: { fontSize: 13, fontWeight: 500, fontStyle: 'normal' },
       bold: { fontSize: 14, fontWeight: 700, fontStyle: 'normal' },
+      italic: { fontSize: 14, fontWeight: 400, fontStyle: 'italic' },
       boldItalic: { fontSize: 14, fontWeight: 700, fontStyle: 'italic' },
     },
     axisTitle: 'bold',
@@ -64,7 +66,7 @@ export const legacyGraphTheme: GraphThemeConfig = {
     headWidth: 12,
   },
   callout: {
-    paddingX: 6,
+    paddingX: 4,
     paddingY: 4,
     borderRadius: 6,
     borderColor: '#334155',

@@ -35,21 +35,11 @@ export interface CurvedArrowGeometry {
   headTo: GraphPoint;
 }
 
-const sampleCurveEconomicPoints = (curve: CurveSpec, chapter: ChapterConfig): Array<[number, number]> => {
-  if (curve.curveType === 'throughPoints' && curve.params.points?.length) {
-    return sampleCatmullRom(
-      curve.params.points.map((point) => ({ x: point.x, y: point.y })),
-      20
-    ).map((point) => [point.x, point.y] as [number, number]);
-  }
-  return generateEconomicCurvePoints(curve, chapter, 80);
-};
-
-const closestEconomicIndex = (points: Array<[number, number]>, target: GraphPoint) => {
+const closestPointIndex = <T extends { x: number; y: number }>(points: T[], target: GraphPoint) => {
   let index = 0;
   let best = Infinity;
   for (let i = 0; i < points.length; i++) {
-    const distance = (points[i][0] - target.x) ** 2 + (points[i][1] - target.y) ** 2;
+    const distance = (points[i].x - target.x) ** 2 + (points[i].y - target.y) ** 2;
     if (distance < best) {
       best = distance;
       index = i;
@@ -58,43 +48,98 @@ const closestEconomicIndex = (points: Array<[number, number]>, target: GraphPoin
   return index;
 };
 
-export const buildCurvedArrowGeometry = (
+/** Pixel samples along the same path `curvePath` draws (d3 Catmull–Rom for throughPoints). */
+const sampleCurvePixelPath = (
+  curve: CurveSpec,
   chapter: ChapterConfig,
-  curveId: string,
-  from: GraphPoint,
-  to: GraphPoint,
-  scales: CoordinateScale
-): CurvedArrowGeometry | null => {
-  const curve = chapter.curves.find((entry) => entry.id === curveId);
-  if (!curve) return null;
-
-  const economic = sampleCurveEconomicPoints(curve, chapter);
-  if (economic.length < 2) return null;
-
-  const fromIdx = closestEconomicIndex(economic, from);
-  const toIdx = closestEconomicIndex(economic, to);
-  let segment =
-    fromIdx <= toIdx ? economic.slice(fromIdx, toIdx + 1) : economic.slice(toIdx, fromIdx + 1).reverse();
-
-  if (segment.length < 2) {
-    segment = [
-      [from.x, from.y],
-      [to.x, to.y],
-    ];
-  } else {
-    segment[0] = [from.x, from.y];
-    segment[segment.length - 1] = [to.x, to.y];
-  }
-
-  const pixelPoints = segment.map(([quantity, price]) => {
+  scales: CoordinateScale,
+  stepsPerBezier = 10
+): Array<[number, number]> => {
+  const economicPoints = generateEconomicCurvePoints(curve, chapter);
+  const knots = economicPoints.map(([quantity, price]) => {
     const [plotX, plotY] = toPlotPoint(quantity, price, chapter);
     return [scales.xScale(plotX), scales.yScale(plotY)] as [number, number];
   });
 
+  if (knots.length < 2) return knots;
+
+  const points: Array<[number, number]> = [];
+  let current: [number, number] | null = null;
+
+  const context = {
+    moveTo(x: number, y: number) {
+      current = [x, y];
+      points.push([x, y]);
+    },
+    lineTo(x: number, y: number) {
+      if (current) {
+        for (let step = 1; step <= 4; step++) {
+          const t = step / 4;
+          points.push([
+            current[0] + t * (x - current[0]),
+            current[1] + t * (y - current[1]),
+          ]);
+        }
+      }
+      current = [x, y];
+      points.push([x, y]);
+    },
+    bezierCurveTo(x1: number, y1: number, x2: number, y2: number, x: number, y: number) {
+      if (!current) return;
+      const p0 = current;
+      const p1: [number, number] = [x1, y1];
+      const p2: [number, number] = [x2, y2];
+      const p3: [number, number] = [x, y];
+      for (let step = 1; step <= stepsPerBezier; step++) {
+        const t = step / stepsPerBezier;
+        const mt = 1 - t;
+        points.push([
+          mt ** 3 * p0[0] + 3 * mt ** 2 * t * p1[0] + 3 * mt * t ** 2 * p2[0] + t ** 3 * p3[0],
+          mt ** 3 * p0[1] + 3 * mt ** 2 * t * p1[1] + 3 * mt * t ** 2 * p2[1] + t ** 3 * p3[1],
+        ]);
+      }
+      current = [x, y];
+    },
+    closePath() {},
+  };
+
   const pathGenerator = line<[number, number]>()
     .x(([x]) => x)
     .y(([, y]) => y)
-    .curve(curveCatmullRom.alpha(0.75));
+    .curve(curve.curveType === 'throughPoints' ? curveCatmullRom.alpha(0.75) : curveLinear)
+    .context(context as unknown as CanvasRenderingContext2D);
+
+  pathGenerator(knots);
+  return points;
+};
+
+const sampleCurveEconomicPoints = (curve: CurveSpec, chapter: ChapterConfig): Array<[number, number]> => {
+  if (curve.curveType === 'throughPoints' && curve.params.points?.length) {
+    return sampleCatmullRom(
+      curve.params.points.map((point) => ({ x: point.x, y: point.y })),
+      48
+    ).map((point) => [point.x, point.y] as [number, number]);
+  }
+  return generateEconomicCurvePoints(curve, chapter, 80);
+};
+
+const toPixelPoints = (
+  segment: Array<[number, number]>,
+  chapter: ChapterConfig,
+  scales: CoordinateScale
+): Array<[number, number]> =>
+  segment.map(([quantity, price]) => {
+    const [plotX, plotY] = toPlotPoint(quantity, price, chapter);
+    return [scales.xScale(plotX), scales.yScale(plotY)] as [number, number];
+  });
+
+const buildShaftFromPixelPoints = (pixelPoints: Array<[number, number]>): CurvedArrowGeometry | null => {
+  if (pixelPoints.length < 2) return null;
+
+  const pathGenerator = line<[number, number]>()
+    .x(([x]) => x)
+    .y(([, y]) => y)
+    .curve(curveLinear);
 
   const shaftPath = pathGenerator(pixelPoints) ?? '';
   const last = pixelPoints[pixelPoints.length - 1];
@@ -105,6 +150,53 @@ export const buildCurvedArrowGeometry = (
     headFrom: { x: prev[0], y: prev[1] },
     headTo: { x: last[0], y: last[1] },
   };
+};
+
+export const buildCurvedArrowGeometry = (
+  chapter: ChapterConfig,
+  curveId: string,
+  from: GraphPoint,
+  to: GraphPoint,
+  scales: CoordinateScale,
+  curves: CurveSpec[] = chapter.curves
+): CurvedArrowGeometry | null => {
+  const curve = curves.find((entry) => entry.id === curveId);
+  if (!curve) return null;
+
+  const pixelPath =
+    curve.curveType === 'throughPoints'
+      ? sampleCurvePixelPath(curve, chapter, scales)
+      : toPixelPoints(sampleCurveEconomicPoints(curve, chapter), chapter, scales);
+
+  if (pixelPath.length < 2) return null;
+
+  const fromPlot = toPlotPoint(from.x, from.y, chapter);
+  const toPlot = toPlotPoint(to.x, to.y, chapter);
+  const fromPx = { x: scales.xScale(fromPlot[0]), y: scales.yScale(fromPlot[1]) };
+  const toPx = { x: scales.xScale(toPlot[0]), y: scales.yScale(toPlot[1]) };
+
+  const fromIdx = closestPointIndex(
+    pixelPath.map(([x, y]) => ({ x, y })),
+    fromPx
+  );
+  const toIdx = closestPointIndex(
+    pixelPath.map(([x, y]) => ({ x, y })),
+    toPx
+  );
+  let segment =
+    fromIdx <= toIdx ? pixelPath.slice(fromIdx, toIdx + 1) : pixelPath.slice(toIdx, fromIdx + 1).reverse();
+
+  if (segment.length < 2) {
+    segment = [
+      [fromPx.x, fromPx.y],
+      [toPx.x, toPx.y],
+    ];
+  } else {
+    segment[0] = [fromPx.x, fromPx.y];
+    segment[segment.length - 1] = [toPx.x, toPx.y];
+  }
+
+  return buildShaftFromPixelPoints(segment);
 };
 
 export const curvePath = (curve: CurveSpec, chapter: ChapterConfig, scales: CoordinateScale) => {

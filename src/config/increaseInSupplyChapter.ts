@@ -50,7 +50,7 @@ export const increaseInSupplyChapter: ChapterConfig = {
     },
     {
       id: 'supply-initial',
-      label: 'S0',
+      label: 'S₀',
       curveType: 'throughPoints',
       params: {
         points: [
@@ -65,7 +65,7 @@ export const increaseInSupplyChapter: ChapterConfig = {
     },
     {
       id: 'supply-new',
-      label: 'S1',
+      label: 'S₁',
       curveType: 'throughPoints',
       params: {
         points: [
@@ -116,17 +116,17 @@ export const increaseInSupplyChapter: ChapterConfig = {
     },
     {
       id: 'quantity-increases',
-      from: { x: 10.08, y: 0.18 },
-      to: { x: 10.92, y: 0.18 },
+      from: { x: 10.08, y: 0.13 },
+      to: { x: 10.92, y: 0.13 },
       label: 'Quantity\nincreases',
       calloutColorRole: 'calloutCream',
       strokeColorRole: 'quantityIncreases',
-      labelOffset: { x: 12, y: 0.28 },
+      labelOffset: { x: 11.8, y: 0.35 },
     },
     {
       id: 'quantity-demanded-increases',
       from: { x: 10, y: 1 },
-      to: { x: 11, y: 0.72 },
+      to: { x: 11.047, y: 0.74 },
       followCurveId: 'demand',
       label: 'Quantity\ndemanded\nincreases',
       calloutColorRole: 'calloutCream',
@@ -144,13 +144,13 @@ export const increaseInSupplyChapter: ChapterConfig = {
     {
       id: 'step-2',
       title: 'Step 2: Initial supply',
-      description: 'Add the original supply curve (S0).',
+      description: 'Add the original supply curve (S₀).',
       visibleLayers: ['demand', 'supply-initial'],
     },
     {
       id: 'step-3',
       title: 'Step 3: Initial equilibrium',
-      description: 'The market clears where S0 intersects D.',
+      description: 'The market clears where S₀ intersects D.',
       visibleLayers: ['demand', 'supply-initial'],
       showEquilibrium: true,
       visibleEquilibria: ['initial'],
@@ -160,7 +160,7 @@ export const increaseInSupplyChapter: ChapterConfig = {
     {
       id: 'step-4',
       title: 'Step 4: Supply increases',
-      description: 'When supply increases, the curve shifts right to S1 (parallel to S0).',
+      description: 'When supply increases, the curve shifts right to S₁ (parallel to S₀).',
       visibleLayers: ['demand', 'supply-initial', 'supply-new'],
       showEquilibrium: true,
       visibleEquilibria: ['initial'],
@@ -204,11 +204,11 @@ export const increaseInSupplyChapter: ChapterConfig = {
   ],
   curveLabels: [
     { curveId: 'demand', text: 'D', x: 12.3, y: 0.52, anchor: 'start', offsetX: 0.22 },
-    { curveId: 'supply-initial', text: 'S0', x: 11.5, y: 1.75, anchor: 'start', offsetX: 0.22 },
-    { curveId: 'supply-new', text: 'S1', x: 12.5, y: 1.5, anchor: 'start', offsetX: 0.22 },
+    { curveId: 'supply-initial', text: 'S₀', x: 11.5, y: 1.75, anchor: 'start', offsetX: 0.22 },
+    { curveId: 'supply-new', text: 'S₁', x: 12.5, y: 1.5, anchor: 'start', offsetX: 0.22 },
   ],
   modeContent: {
     book: '(a) An increase in supply: S shifts right along parallel supply curves; equilibrium price falls and equilibrium quantity rises.',
-    animate: 'Watch D, S0, the shift to S1, and the textbook callout arrows.',
+    animate: 'Watch D, S₀, the shift to S₁, and the textbook callout arrows.',
   },
 };
