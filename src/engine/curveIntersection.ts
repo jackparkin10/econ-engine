@@ -142,6 +142,25 @@ export const insertEquilibriumKnots = (
   return result;
 };
 
+/** Price (y) on the same Catmull–Rom spline as rendered curves, at a given quantity (x). */
+export const priceAtQuantity = (points: CurvePoint[], quantity: number): number | null => {
+  if (points.length < 2) return null;
+
+  const samples = sampleCatmullRom(points);
+  for (let i = 0; i < samples.length - 1; i++) {
+    const a = samples[i];
+    const b = samples[i + 1];
+    const minX = Math.min(a.x, b.x);
+    const maxX = Math.max(a.x, b.x);
+    if (quantity < minX - 1e-9 || quantity > maxX + 1e-9) continue;
+    if (Math.abs(b.x - a.x) < 1e-9) return (a.y + b.y) / 2;
+    const t = (quantity - a.x) / (b.x - a.x);
+    return a.y + t * (b.y - a.y);
+  }
+
+  return null;
+};
+
 /** Quantity (x) on a piecewise-linear path through control points at a given price (y). */
 export const quantityAtPrice = (points: CurvePoint[], price: number): number | null => {
   if (points.length < 2) return null;

@@ -26,48 +26,6 @@ const offsetPoint = (base: Point, dir: { dx: number; dy: number }, distance: num
   y: base.y + dir.dx * distance * side,
 });
 
-/** Nearest point on callout box border toward `target`. */
-const nearestBoxEdgePoint = (
-  target: Point,
-  left: number,
-  top: number,
-  right: number,
-  bottom: number
-): Point => {
-  const x = Math.max(left, Math.min(target.x, right));
-  const y = Math.max(top, Math.min(target.y, bottom));
-  if (target.x >= left && target.x <= right && target.y >= top && target.y <= bottom) {
-    const toLeft = target.x - left;
-    const toRight = right - target.x;
-    const toTop = target.y - top;
-    const toBottom = bottom - target.y;
-    const min = Math.min(toLeft, toRight, toTop, toBottom);
-    if (min === toLeft) return { x: left, y: target.y };
-    if (min === toRight) return { x: right, y: target.y };
-    if (min === toTop) return { x: target.x, y: top };
-    return { x: target.x, y: bottom };
-  }
-  return { x, y };
-};
-
-/** Nearest point on arrow shaft outline (capsule) toward `target`. */
-const nearestArrowBorderPoint = (target: Point, tail: Point, tip: Point, radius: number): Point => {
-  const dx = tip.x - tail.x;
-  const dy = tip.y - tail.y;
-  const lenSq = dx * dx + dy * dy || 1;
-  let t = ((target.x - tail.x) * dx + (target.y - tail.y) * dy) / lenSq;
-  t = Math.max(0, Math.min(1, t));
-  const cx = tail.x + t * dx;
-  const cy = tail.y + t * dy;
-  const distX = target.x - cx;
-  const distY = target.y - cy;
-  const dist = Math.hypot(distX, distY) || 1;
-  return {
-    x: cx + (distX / dist) * radius,
-    y: cy + (distY / dist) * radius,
-  };
-};
-
 /** Single filled outline: shaft + head as one shape (no separate spine/head layers). */
 export const buildUnitedArrowPath = (
   from: Point,
@@ -123,6 +81,7 @@ interface GraphArrowProps {
   curved?: CurvedArrowGeometry;
   theme: GraphThemeConfig;
   fill: string;
+  borderStroke: string;
   strokeGradient?: ResolvedArrowGradient;
   labelStyle: ResolvedTextStyle;
   calloutFill: string;
@@ -136,6 +95,7 @@ export const GraphArrow: React.FC<GraphArrowProps> = ({
   curved,
   theme,
   fill,
+  borderStroke,
   strokeGradient,
   labelStyle,
   calloutFill,
@@ -144,7 +104,7 @@ export const GraphArrow: React.FC<GraphArrowProps> = ({
   const thickness = arrow.thicknessScale ?? 1;
   const arrowStyle = {
     bodyWidth: theme.arrow.outlineWidth * thickness,
-    headLength: theme.arrow.headLength * thickness,
+    headLength: theme.arrow.headLength,
     headWidth: theme.arrow.headWidth * thickness,
   };
   const headFrom = curved?.headFrom ?? from;
@@ -158,8 +118,12 @@ export const GraphArrow: React.FC<GraphArrowProps> = ({
   );
   const gradientId = `arrow-gradient-${arrow.id}`;
   const strokePaint = strokeGradient ? `url(#${gradientId})` : fill;
-  const fillOpacity = theme.arrow.fillOpacity ?? 0.85;
-  const borderWidth = (theme.arrow.borderWidth ?? 1) * thickness;
+  const fillOpacity = arrow.fillOpacity ?? theme.arrow.fillOpacity ?? 1;
+  const borderWidth =
+    arrow.borderWidth != null
+      ? arrow.borderWidth * thickness
+      : (theme.arrow.borderWidth ?? 1) * thickness;
+  const showBorder = borderWidth > 0;
   const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
   const labelX = labelOffset?.x ?? mid.x;
   const labelY = labelOffset?.y ?? mid.y;
@@ -179,20 +143,9 @@ export const GraphArrow: React.FC<GraphArrowProps> = ({
   const textX = theme.callout.textAlign === 'left' ? padLeft : boxWidth / 2;
   const boxLeft = labelX - boxWidth / 2;
   const boxTop = labelY - boxHeight / 2;
-  const boxRight = labelX + boxWidth / 2;
-  const boxBottom = labelY + boxHeight / 2;
   const connector = theme.callout.connector;
-  const arrowMid = {
-    x: (from.x + headTo.x) / 2,
-    y: (from.y + headTo.y) / 2,
-  };
-  const connectorEnds =
-    connector &&
-    (() => {
-      const boxEdge = nearestBoxEdgePoint(arrowMid, boxLeft, boxTop, boxRight, boxBottom);
-      const arrowEdge = nearestArrowBorderPoint(boxEdge, from, headTo, arrowStyle.bodyWidth / 2);
-      return { boxEdge, arrowEdge };
-    })();
+  const arrowMid = { x: (headFrom.x + headTo.x) / 2, y: (headFrom.y + headTo.y) / 2 };
+  const calloutMid = { x: labelX, y: labelY };
 
   return (
     <g>
@@ -211,33 +164,47 @@ export const GraphArrow: React.FC<GraphArrowProps> = ({
           </linearGradient>
         </defs>
       ) : null}
-      {connector && connectorEnds ? (
+      {connector ? (
         <line
-          x1={connectorEnds.boxEdge.x}
-          y1={connectorEnds.boxEdge.y}
-          x2={connectorEnds.arrowEdge.x}
-          y2={connectorEnds.arrowEdge.y}
+          x1={calloutMid.x}
+          y1={calloutMid.y}
+          x2={arrowMid.x}
+          y2={arrowMid.y}
           stroke={connector.stroke}
           strokeWidth={connector.strokeWidth}
         />
       ) : null}
-      {curved ? (
-        <path
-          d={curved.shaftPath}
-          fill="none"
-          stroke={strokePaint}
-          strokeWidth={arrowStyle.bodyWidth}
-          strokeOpacity={fillOpacity}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+      {curved?.shaftPath ? (
+        <>
+          {showBorder ? (
+            <path
+              d={curved.shaftPath}
+              fill="none"
+              stroke={borderStroke}
+              strokeWidth={arrowStyle.bodyWidth + borderWidth * 2}
+              strokeOpacity={1}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          ) : null}
+          <path
+            d={curved.shaftPath}
+            fill="none"
+            stroke={strokePaint}
+            strokeWidth={arrowStyle.bodyWidth}
+            strokeOpacity={fillOpacity}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </>
       ) : null}
       <path
         d={curved ? unitedHeadPath : buildUnitedArrowPath(from, to, arrowStyle.bodyWidth, arrowStyle.headLength, arrowStyle.headWidth)}
         fill={strokePaint}
         fillOpacity={fillOpacity}
-        stroke={strokePaint}
-        strokeWidth={borderWidth}
+        stroke={showBorder ? borderStroke : 'none'}
+        strokeWidth={showBorder ? borderWidth : 0}
+        strokeOpacity={1}
         strokeLinejoin="round"
         strokeLinecap="round"
       />

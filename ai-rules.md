@@ -136,6 +136,7 @@ Defined in chapter `graphArrows[]`, rendered by `src/components/graph/graphArrow
 ### Arrow geometry
 - **Straight (default)** — `from` / `to` in **Q–P space**; canvas converts with scales.
 - **Curved** — `followCurveId: '<curve-id>'` bends from `from` to `to` along that curve (same spline as the curve). Used for “quantity demanded increases” along **D**.
+- **Curve quantities** — With `followCurveId`, set `fromQuantity` / `toQuantity` (Q on the x-axis) instead of hand-tuned `y`; `resolveGraphArrowEndpoints` reads price from the curve via `priceAtQuantity` (Catmull–Rom, same as rendering).
 
 ### Arrow styling (textbook theme)
 - **Unified shape** — One filled path (shaft + head), not separate black outline + inner spine.

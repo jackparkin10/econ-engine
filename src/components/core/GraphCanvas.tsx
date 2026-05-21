@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { animate, motion } from 'framer-motion';
-import { ChapterConfig, StageMode, BuildStep } from '../../engine/types';
+import { ChapterConfig, GraphArrowSpec, StageMode, BuildStep } from '../../engine/types';
 import {
   applyExploreBindings,
   buildCurvedArrowGeometry,
+  resolveGraphArrowEndpoints,
   createScales,
   curvePath,
   findEquilibrium,
@@ -15,6 +16,7 @@ import {
 import {
   formatAxisTick,
   resolveChapterGraphStyle,
+  resolveArrowBorder,
   resolveArrowGradient,
   resolveArrowStroke,
   resolveCalloutFill,
@@ -40,13 +42,16 @@ const ELASTICITY_CURVE_BY_LEVEL = [
 ] as const;
 
 const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activeStep, exploreValues }) => {
-  const bookStep = useMemo(() => {
+  const teachingStep = useMemo(() => {
+    if (mode !== 'book' && mode !== 'explore') return undefined;
     if (!chapter.bookBuildStepId) return undefined;
     return chapter.buildSteps?.find((step) => step.id === chapter.bookBuildStepId);
-  }, [chapter.bookBuildStepId, chapter.buildSteps]);
+  }, [chapter.bookBuildStepId, chapter.buildSteps, mode]);
 
-  const stepSnapshot = mode === 'book' ? bookStep : mode === 'build' ? activeStep : undefined;
-  const usesStepSnapshot = Boolean(stepSnapshot) && (mode === 'book' || mode === 'build');
+  const stepSnapshot =
+    mode === 'build' ? activeStep : mode === 'book' || mode === 'explore' ? teachingStep : undefined;
+  const usesStepSnapshot =
+    Boolean(stepSnapshot) && (mode === 'book' || mode === 'build' || mode === 'explore');
 
   const style = useMemo(() => resolveChapterGraphStyle(chapter, mode), [chapter, mode]);
   const { layout, theme } = style;
@@ -110,11 +115,11 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
     let resolved: ResolvedEquilibrium[] = [];
 
     if (chapter.equilibria?.length) {
-      if (mode === 'explore') {
-        resolved = resolveEquilibria(chapter, boundCurves);
-      } else if (usesStepSnapshot && stepSnapshot?.showEquilibrium) {
+      if (usesStepSnapshot && stepSnapshot?.showEquilibrium) {
         const ids = stepSnapshot.visibleEquilibria ?? chapter.equilibria.map((entry) => entry.id);
         resolved = resolveEquilibria(chapter, boundCurves, ids);
+      } else if (mode === 'explore') {
+        resolved = resolveEquilibria(chapter, boundCurves);
       }
     } else {
       const point = chapter.equilibriumPoint ?? findEquilibrium(boundCurves, chapter);
@@ -159,17 +164,19 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
     style,
   ]);
 
+  const usesTeachingSnapshot = usesStepSnapshot && (mode === 'book' || mode === 'explore');
   const showEquilibriumGuides =
-    (mode !== 'build' && mode !== 'book') || Boolean(stepSnapshot?.showEquilibrium);
-  const showPriceLine = (mode !== 'build' && mode !== 'book') || Boolean(stepSnapshot?.showPriceLine);
+    (mode !== 'build' && !usesTeachingSnapshot) || Boolean(stepSnapshot?.showEquilibrium);
+  const showPriceLine =
+    (mode !== 'build' && !usesTeachingSnapshot) || Boolean(stepSnapshot?.showPriceLine);
   const showQuantityLine =
-    (mode !== 'build' && mode !== 'book') || Boolean(stepSnapshot?.showQuantityLine);
+    (mode !== 'build' && !usesTeachingSnapshot) || Boolean(stepSnapshot?.showQuantityLine);
 
   const visibleArrowIds = useMemo(() => {
     if (usesStepSnapshot && stepSnapshot?.visibleAnnotations?.length) {
       return stepSnapshot.visibleAnnotations;
     }
-    if (mode === 'explore') {
+    if (mode === 'explore' && !usesTeachingSnapshot) {
       return chapter.graphArrows?.map((arrow) => arrow.id) ?? [];
     }
     return [];
@@ -199,9 +206,52 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
   const xTicks =
     chapter.xAxis.ticks ||
     Array.from({ length: 11 }, (_, i) => chapter.xAxis.min + ((chapter.xAxis.max - chapter.xAxis.min) * i) / 10);
-  const yTicks =
+  const baseYTicks =
     chapter.yAxis.ticks ||
     Array.from({ length: 11 }, (_, i) => chapter.yAxis.min + ((chapter.yAxis.max - chapter.yAxis.min) * i) / 10);
+
+  const highlightedAxisValues = useMemo(() => {
+    const quantities: number[] = [];
+    const prices: number[] = [];
+    for (const equilibrium of equilibriaToRender) {
+      const stepHighlight = stepSnapshot?.axisHighlights?.find(
+        (entry) => entry.equilibriumId === equilibrium.id
+      );
+      if (stepHighlight) {
+        if (stepHighlight.quantity) quantities.push(equilibrium.point.x);
+        if (stepHighlight.price) prices.push(equilibrium.point.y);
+        continue;
+      }
+      const spec = chapter.equilibria?.find((entry) => entry.id === equilibrium.id);
+      if (!spec?.highlightAxisValues) continue;
+      quantities.push(equilibrium.point.x);
+      prices.push(equilibrium.point.y);
+    }
+    return { quantities, prices };
+  }, [equilibriaToRender, chapter.equilibria, stepSnapshot?.axisHighlights]);
+
+  const tickNear = (tick: number, values: number[]) =>
+    values.some((value) => Math.abs(tick - value) < 0.001);
+
+  const yTicks = useMemo(() => {
+    const extraPrices = highlightedAxisValues.prices.filter(
+      (price) => !baseYTicks.some((tick) => Math.abs(tick - price) < 0.001)
+    );
+    if (extraPrices.length === 0) return baseYTicks;
+    return [...baseYTicks, ...extraPrices].sort((a, b) => a - b);
+  }, [baseYTicks, highlightedAxisValues.prices]);
+
+  const highlightTickFill = style.resolveColor('supplyInitial');
+
+  const isHighlightedAxisTick = (tick: number, axis: 'x' | 'y') =>
+    axis === 'x'
+      ? tickNear(tick, highlightedAxisValues.quantities)
+      : tickNear(tick, highlightedAxisValues.prices);
+
+  const tickLabelStyle = (tick: number, axis: 'x' | 'y') => {
+    const highlighted = isHighlightedAxisTick(tick, axis);
+    return highlighted ? { ...style.tickStyle, fill: highlightTickFill } : style.tickStyle;
+  };
 
   const formatTick = (value: number, axis: typeof chapter.xAxis) =>
     axis.format ? axis.format(value) : formatAxisTick(value, axis.tickFormat);
@@ -270,6 +320,112 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
     return () => controls.stop();
   }, [activeMorph, activeStep, mode]);
 
+  const visibleArrows = useMemo(
+    () => chapter.graphArrows?.filter((arrow) => visibleArrowIds.includes(arrow.id)) ?? [],
+    [chapter.graphArrows, visibleArrowIds]
+  );
+  const behindCurveIds = useMemo(
+    () => new Set(visibleArrows.map((arrow) => arrow.belowCurveId).filter(Boolean) as string[]),
+    [visibleArrows]
+  );
+  const arrowsBehindCurves = useMemo(
+    () => visibleArrows.filter((arrow) => arrow.belowCurveId),
+    [visibleArrows]
+  );
+  const arrowsInFront = useMemo(
+    () => visibleArrows.filter((arrow) => !arrow.belowCurveId),
+    [visibleArrows]
+  );
+  const curvesUnderArrows = useMemo(
+    () => displayCurves.filter((curve) => !behindCurveIds.has(curve.id)),
+    [displayCurves, behindCurveIds]
+  );
+  const curvesOverArrows = useMemo(
+    () => displayCurves.filter((curve) => behindCurveIds.has(curve.id)),
+    [displayCurves, behindCurveIds]
+  );
+
+  const renderCurve = (curve: (typeof displayCurves)[0]) => {
+    const curveStyle = style.curves.get(curve.id);
+    if (!curveStyle) return null;
+
+    const isSlidingIn =
+      activeMorph &&
+      curve.id === activeMorph.target.id &&
+      morphProgress < 1 &&
+      activeMorph.source.params.points &&
+      curve.params.points;
+
+    const renderCurveSpec = isSlidingIn
+      ? {
+          ...curve,
+          params: {
+            ...curve.params,
+            points: interpolateCurvePoints(
+              activeMorph.source.params.points ?? [],
+              curve.params.points ?? [],
+              morphProgress
+            ),
+          },
+        }
+      : curve;
+
+    const priorBuildLayers = previousBuildStep.current?.visibleLayers ?? [];
+    const curveAlreadyRevealed =
+      mode === 'build' && priorBuildLayers.includes(curve.id);
+    const useDrawAnimation =
+      Boolean(curveStyle.animated) &&
+      !(activeMorph && curve.id === activeMorph.target.id) &&
+      !curveAlreadyRevealed;
+
+    return (
+      <motion.path
+        key={isSlidingIn ? `${curve.id}-slide` : curve.id}
+        d={curvePath(renderCurveSpec, chapter, scales)}
+        fill="none"
+        stroke={curveStyle.stroke}
+        strokeWidth={curveStyle.strokeWidth}
+        strokeLinecap={curveStyle.strokeLinecap}
+        strokeDasharray={curveStyle.strokeDasharray}
+        initial={{ pathLength: useDrawAnimation ? 0 : 1 }}
+        animate={{ pathLength: 1 }}
+        transition={{ duration: useDrawAnimation ? 1.4 : 0.3, ease: 'easeOut' }}
+      />
+    );
+  };
+
+  const renderGraphArrow = (arrow: GraphArrowSpec) => {
+    const endpoints = resolveGraphArrowEndpoints(arrow, displayCurves);
+    const curved = arrow.followCurveId
+      ? buildCurvedArrowGeometry(
+          chapter,
+          arrow.followCurveId,
+          endpoints.from,
+          endpoints.to,
+          scales,
+          displayCurves
+        )
+      : null;
+    const arrowFill = resolveArrowStroke(style, arrow);
+
+    return (
+      <GraphArrow
+        key={arrow.id}
+        arrow={arrow}
+        from={toPx(endpoints.from)}
+        to={toPx(endpoints.to)}
+        curved={curved ?? undefined}
+        theme={theme}
+        fill={arrowFill}
+        borderStroke={resolveArrowBorder(style, arrow, arrowFill)}
+        strokeGradient={resolveArrowGradient(style, arrow)}
+        calloutFill={resolveCalloutFill(style, arrow)}
+        labelStyle={style.calloutStyle}
+        labelOffset={arrow.labelOffset ? toPx(arrow.labelOffset) : undefined}
+      />
+    );
+  };
+
   return (
     <motion.div
       className="relative"
@@ -312,19 +468,21 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
 
           {xTicks.map((tick) => (
             <g key={`xlabel-${tick}`}>
-              <line
-                x1={scales.xScale(tick)}
-                y1={plotBottom}
-                x2={scales.xScale(tick)}
-                y2={plotBottom + 8}
-                stroke={theme.colors.axis}
-                strokeWidth={1}
-              />
+              {!isHighlightedAxisTick(tick, 'x') ? (
+                <line
+                  x1={scales.xScale(tick)}
+                  y1={plotBottom}
+                  x2={scales.xScale(tick)}
+                  y2={plotBottom + 8}
+                  stroke={theme.colors.axis}
+                  strokeWidth={1}
+                />
+              ) : null}
               <text
                 x={scales.xScale(tick)}
                 y={plotBottom + 22}
                 textAnchor="middle"
-                {...style.tickStyle}
+                {...tickLabelStyle(tick, 'x')}
               >
                 {formatTick(tick, chapter.xAxis)}
               </text>
@@ -333,101 +491,31 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
 
           {yTicks.map((tick) => (
             <g key={`ylabel-${tick}`}>
-              <line
-                x1={-8}
-                y1={scales.yScale(tick)}
-                x2={0}
-                y2={scales.yScale(tick)}
-                stroke={theme.colors.axis}
-                strokeWidth={1}
-              />
+              {!isHighlightedAxisTick(tick, 'y') ? (
+                <line
+                  x1={-8}
+                  y1={scales.yScale(tick)}
+                  x2={0}
+                  y2={scales.yScale(tick)}
+                  stroke={theme.colors.axis}
+                  strokeWidth={1}
+                />
+              ) : null}
               <text
                 x={-12}
                 y={scales.yScale(tick) + 4}
                 textAnchor="end"
-                {...style.tickStyle}
+                {...tickLabelStyle(tick, 'y')}
               >
                 {formatTick(tick, chapter.yAxis)}
               </text>
             </g>
           ))}
 
-          {displayCurves.map((curve) => {
-            const curveStyle = style.curves.get(curve.id);
-            if (!curveStyle) return null;
-
-            const isSlidingIn =
-              activeMorph &&
-              curve.id === activeMorph.target.id &&
-              morphProgress < 1 &&
-              activeMorph.source.params.points &&
-              curve.params.points;
-
-            const renderCurve = isSlidingIn
-              ? {
-                  ...curve,
-                  params: {
-                    ...curve.params,
-                    points: interpolateCurvePoints(
-                      activeMorph.source.params.points ?? [],
-                      curve.params.points ?? [],
-                      morphProgress
-                    ),
-                  },
-                }
-              : curve;
-
-            const useDrawAnimation =
-              Boolean(curveStyle.animated) &&
-              !(activeMorph && curve.id === activeMorph.target.id);
-
-            return (
-              <motion.path
-                key={isSlidingIn ? `${curve.id}-slide` : curve.id}
-                d={curvePath(renderCurve, chapter, scales)}
-                fill="none"
-                stroke={curveStyle.stroke}
-                strokeWidth={curveStyle.strokeWidth}
-                strokeLinecap={curveStyle.strokeLinecap}
-                strokeDasharray={curveStyle.strokeDasharray}
-                initial={{ pathLength: useDrawAnimation ? 0 : 1 }}
-                animate={{ pathLength: 1 }}
-                transition={{ duration: useDrawAnimation ? 1.4 : 0.3, ease: 'easeOut' }}
-              />
-            );
-          })}
-
-          {chapter.graphArrows
-            ?.filter((arrow) => visibleArrowIds.includes(arrow.id))
-            .map((arrow) => {
-              const curved =
-                arrow.followCurveId
-                  ? buildCurvedArrowGeometry(
-                      chapter,
-                      arrow.followCurveId,
-                      arrow.from,
-                      arrow.to,
-                      scales,
-                      displayCurves
-                    )
-                  : null;
-
-              return (
-                <GraphArrow
-                  key={arrow.id}
-                  arrow={arrow}
-                  from={toPx(arrow.from)}
-                  to={toPx(arrow.to)}
-                  curved={curved ?? undefined}
-                  theme={theme}
-                  fill={resolveArrowStroke(style, arrow)}
-                  strokeGradient={resolveArrowGradient(style, arrow)}
-                  calloutFill={resolveCalloutFill(style, arrow)}
-                  labelStyle={style.calloutStyle}
-                  labelOffset={arrow.labelOffset ? toPx(arrow.labelOffset) : undefined}
-                />
-              );
-            })}
+          {curvesUnderArrows.map(renderCurve)}
+          {arrowsBehindCurves.map(renderGraphArrow)}
+          {curvesOverArrows.map(renderCurve)}
+          {arrowsInFront.map(renderGraphArrow)}
 
           {supplyDemandExploreIllustration ? (
             <>
@@ -519,49 +607,65 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
           })}
 
           {showEquilibriumGuides
-            ? equilibriaToRender.map((equilibrium) => (
-                <g key={equilibrium.id}>
-                  {theme.equilibrium.showPoints ? (
-                    <circle
-                      cx={scales.xScale(equilibrium.point.x)}
-                      cy={scales.yScale(equilibrium.point.y)}
-                      r={theme.equilibrium.pointRadius}
-                      fill={equilibrium.color ?? theme.equilibrium.pointFill}
-                      stroke={theme.equilibrium.pointStroke}
-                      strokeWidth={theme.equilibrium.pointStrokeWidth}
-                    />
-                  ) : null}
-                  {showPriceLine ? (
-                    <line
-                      x1={0}
-                      y1={scales.yScale(equilibrium.point.y)}
-                      x2={scales.xScale(equilibrium.point.x)}
-                      y2={scales.yScale(equilibrium.point.y)}
-                      stroke={equilibrium.color}
-                      strokeWidth={theme.equilibrium.guideStrokeWidth}
-                      strokeDasharray={theme.equilibrium.guideDasharray}
-                    />
-                  ) : null}
-                  {showQuantityLine ? (
-                    <line
-                      x1={scales.xScale(equilibrium.point.x)}
-                      y1={plotBottom}
-                      x2={scales.xScale(equilibrium.point.x)}
-                      y2={scales.yScale(equilibrium.point.y)}
-                      stroke={equilibrium.color}
-                      strokeWidth={theme.equilibrium.guideStrokeWidth}
-                      strokeDasharray={theme.equilibrium.guideDasharray}
-                    />
-                  ) : null}
-                </g>
-              ))
+            ? equilibriaToRender.map((equilibrium) => {
+                const applyGuideOverrides = usesStepSnapshot && mode !== 'explore';
+                const pointIds =
+                  (applyGuideOverrides && stepSnapshot?.visibleEquilibriumPoints) ||
+                  equilibriaToRender.map((entry) => entry.id);
+                const priceGuideIds =
+                  (applyGuideOverrides && stepSnapshot?.priceGuideEquilibria) ||
+                  (showPriceLine ? equilibriaToRender.map((entry) => entry.id) : []);
+                const quantityGuideIds =
+                  (applyGuideOverrides && stepSnapshot?.quantityGuideEquilibria) ||
+                  (showQuantityLine ? equilibriaToRender.map((entry) => entry.id) : []);
+                const showPoint = pointIds.includes(equilibrium.id);
+                const showPriceGuide = priceGuideIds.includes(equilibrium.id);
+                const showQuantityGuide = quantityGuideIds.includes(equilibrium.id);
+
+                return (
+                  <g key={equilibrium.id}>
+                    {theme.equilibrium.showPoints && showPoint ? (
+                      <circle
+                        cx={scales.xScale(equilibrium.point.x)}
+                        cy={scales.yScale(equilibrium.point.y)}
+                        r={theme.equilibrium.pointRadius}
+                        fill={equilibrium.color ?? theme.equilibrium.pointFill}
+                        stroke={theme.equilibrium.pointStroke}
+                        strokeWidth={theme.equilibrium.pointStrokeWidth}
+                      />
+                    ) : null}
+                    {showPriceGuide ? (
+                      <line
+                        x1={0}
+                        y1={scales.yScale(equilibrium.point.y)}
+                        x2={scales.xScale(equilibrium.point.x)}
+                        y2={scales.yScale(equilibrium.point.y)}
+                        stroke={equilibrium.color}
+                        strokeWidth={theme.equilibrium.guideStrokeWidth}
+                        strokeDasharray={theme.equilibrium.guideDasharray}
+                      />
+                    ) : null}
+                    {showQuantityGuide ? (
+                      <line
+                        x1={scales.xScale(equilibrium.point.x)}
+                        y1={plotBottom}
+                        x2={scales.xScale(equilibrium.point.x)}
+                        y2={scales.yScale(equilibrium.point.y)}
+                        stroke={equilibrium.color}
+                        strokeWidth={theme.equilibrium.guideStrokeWidth}
+                        strokeDasharray={theme.equilibrium.guideDasharray}
+                      />
+                    ) : null}
+                  </g>
+                );
+              })
             : null}
         </g>
 
         <text
-          x={margin.left + plotWidth / 2}
+          x={margin.left + plotWidth}
           y={height - 18}
-          textAnchor="middle"
+          textAnchor="end"
           {...style.axisTitleStyle}
         >
           {chapter.xAxis.label}

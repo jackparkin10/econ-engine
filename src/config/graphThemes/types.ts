@@ -78,7 +78,7 @@ export interface GraphThemeConfig {
       color: string;
     };
     textAlign: 'left' | 'center';
-    /** Thin line from callout edge (toward arrow mid) to arrow outline; drawn beneath arrows and box. */
+    /** Thin line from callout center to arrow center; drawn beneath arrows and box. */
     connector?: {
       stroke: string;
       strokeWidth: number;

@@ -69,12 +69,12 @@ export const textbookGraphTheme: GraphThemeConfig = {
   },
   arrow: {
     outlineColor: '#1a1a1a',
-    outlineWidth: 6.25,
+    outlineWidth: 14.5,
     shaftWidth: 3,
-    headLength: 11,
-    headWidth: 17.5,
-    fillOpacity: 0.82,
-    borderWidth: 1.25,
+    headLength: 18,
+    headWidth: 27.3,
+    fillOpacity: 1,
+    borderWidth: 0.6,
   },
   callout: {
     paddingX: 1,
@@ -94,7 +94,7 @@ export const textbookGraphTheme: GraphThemeConfig = {
     textAlign: 'left',
     connector: {
       stroke: '#000000',
-      strokeWidth: 0.75,
+      strokeWidth: 0.975,
     },
   },
 };

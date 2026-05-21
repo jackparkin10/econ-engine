@@ -1,8 +1,13 @@
 import { line, curveCatmullRom, curveLinear } from 'd3-shape';
 import { scaleLinear, type ScaleLinear } from 'd3-scale';
-import { AxisConfig, ChapterConfig, CurvePoint, CurveSpec, GraphPoint } from './types';
+import { AxisConfig, ChapterConfig, CurvePoint, CurveSpec, GraphArrowSpec, GraphPoint } from './types';
 import { generateEconomicCurvePoints, toPlotPoint } from './graphCoordinates';
-import { findThroughPointsIntersection, insertEquilibriumKnots, sampleCatmullRom } from './curveIntersection';
+import {
+  findThroughPointsIntersection,
+  insertEquilibriumKnots,
+  priceAtQuantity,
+  sampleCatmullRom,
+} from './curveIntersection';
 
 export { insertEquilibriumKnots };
 
@@ -141,14 +146,47 @@ const buildShaftFromPixelPoints = (pixelPoints: Array<[number, number]>): Curved
     .y(([, y]) => y)
     .curve(curveLinear);
 
-  const shaftPath = pathGenerator(pixelPoints) ?? '';
   const last = pixelPoints[pixelPoints.length - 1];
   const prev = pixelPoints[pixelPoints.length - 2];
+  const headFrom = { x: prev[0], y: prev[1] };
+  const headTo = { x: last[0], y: last[1] };
+
+  const shaftPoints = pixelPoints.length > 2 ? pixelPoints.slice(0, -1) : null;
+  const shaftPath =
+    shaftPoints && shaftPoints.length >= 2 ? pathGenerator(shaftPoints) ?? '' : '';
 
   return {
     shaftPath,
-    headFrom: { x: prev[0], y: prev[1] },
-    headTo: { x: last[0], y: last[1] },
+    headFrom,
+    headTo,
+  };
+};
+
+/** Resolves Q–P arrow endpoints; quantities on `followCurveId` use the curve spline for price (y). */
+export const resolveGraphArrowEndpoints = (
+  arrow: GraphArrowSpec,
+  curves: CurveSpec[] = []
+): { from: GraphPoint; to: GraphPoint } => {
+  const fallbackFrom = arrow.from ?? { x: 0, y: 0 };
+  const fallbackTo = arrow.to ?? { x: 0, y: 0 };
+
+  if (arrow.fromQuantity == null && arrow.toQuantity == null) {
+    return { from: fallbackFrom, to: fallbackTo };
+  }
+
+  const curve = arrow.followCurveId ? curves.find((entry) => entry.id === arrow.followCurveId) : undefined;
+  const controlPoints = curve?.curveType === 'throughPoints' ? curve.params.points ?? [] : [];
+
+  const resolveAtQuantity = (quantity: number, fallback: GraphPoint): GraphPoint => {
+    if (!controlPoints.length) return fallback;
+    const price = priceAtQuantity(controlPoints, quantity);
+    return price != null ? { x: quantity, y: price } : fallback;
+  };
+
+  return {
+    from:
+      arrow.fromQuantity != null ? resolveAtQuantity(arrow.fromQuantity, fallbackFrom) : fallbackFrom,
+    to: arrow.toQuantity != null ? resolveAtQuantity(arrow.toQuantity, fallbackTo) : fallbackTo,
   };
 };
 

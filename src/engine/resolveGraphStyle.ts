@@ -136,6 +136,16 @@ export const resolveArrowStroke = (
   return style.resolveColor('demand');
 };
 
+export const resolveArrowBorder = (
+  style: ResolvedChapterGraphStyle,
+  arrow: GraphArrowSpec,
+  fill: string
+): string => {
+  if (arrow.borderColor) return arrow.borderColor;
+  if (arrow.borderColorRole) return style.resolveColor(arrow.borderColorRole);
+  return fill;
+};
+
 export const resolveArrowGradient = (
   style: ResolvedChapterGraphStyle,
   arrow: GraphArrowSpec

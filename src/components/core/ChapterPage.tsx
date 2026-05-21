@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ChapterConfig, StageMode } from '../../engine/types';
 import DisplayPanel from './DisplayPanel';
@@ -19,7 +19,25 @@ const ChapterPage: React.FC<ChapterPageProps> = ({ chapter }) => {
     }, {} as Record<string, number | boolean>) ?? {}
   );
 
-  const currentBuild = useMemo(() => chapter.buildSteps?.[activeStep], [chapter.buildSteps, activeStep]);
+  const buildStepCount = chapter.buildSteps?.length ?? 0;
+
+  useEffect(() => {
+    setActiveStep(-1);
+  }, [chapter.id]);
+
+  useEffect(() => {
+    if (buildStepCount === 0) return;
+    if (activeStep >= buildStepCount) {
+      setActiveStep(buildStepCount - 1);
+    }
+  }, [buildStepCount, activeStep]);
+
+  const clampedStepIndex =
+    buildStepCount > 0 ? Math.min(activeStep, buildStepCount - 1) : -1;
+  const currentBuild = useMemo(
+    () => chapter.buildSteps?.[clampedStepIndex],
+    [chapter.buildSteps, clampedStepIndex]
+  );
 
   const handleNextStep = () => {
     if (chapter.buildSteps && activeStep < chapter.buildSteps.length - 1) {
@@ -48,8 +66,8 @@ const ChapterPage: React.FC<ChapterPageProps> = ({ chapter }) => {
           chapter={chapter} 
           mode={mode} 
           activeStep={currentBuild}
-          currentStepIndex={activeStep}
-          totalSteps={chapter.buildSteps?.length || 0}
+          currentStepIndex={clampedStepIndex}
+          totalSteps={buildStepCount}
           onNextStep={handleNextStep}
           onPreviousStep={handlePreviousStep}
           onResetSteps={handleResetSteps}

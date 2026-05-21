@@ -78,6 +78,8 @@ export interface EquilibriumSpec {
   label?: string;
   /** Optional fixed equilibrium in Q–P space (used for non-linear curves). */
   point?: CurvePoint;
+  /** When visible, label equilibrium Q/P on the axes in red; add P to y ticks if missing. */
+  highlightAxisValues?: boolean;
 }
 
 export interface ExploreBinding {
@@ -94,6 +96,12 @@ export interface AnnotationSpec {
   anchor?: 'start' | 'middle' | 'end';
 }
 
+export interface BuildStepAxisHighlight {
+  equilibriumId: string;
+  price?: boolean;
+  quantity?: boolean;
+}
+
 export interface BuildStep {
   id: string;
   title: string;
@@ -102,9 +110,17 @@ export interface BuildStep {
   activeControls?: string[];
   showEquilibrium?: boolean;
   visibleEquilibria?: string[];
+  /** Subset of `visibleEquilibria` that show intersection dots (defaults to all visible). */
+  visibleEquilibriumPoints?: string[];
   visibleAnnotations?: string[];
   showPriceLine?: boolean;
   showQuantityLine?: boolean;
+  /** Equilibrium ids that get a horizontal price guide (defaults to all visible when `showPriceLine`). */
+  priceGuideEquilibria?: string[];
+  /** Equilibrium ids that get a vertical quantity guide (defaults to all visible when `showQuantityLine`). */
+  quantityGuideEquilibria?: string[];
+  /** Per-step axis tick highlights (overrides `EquilibriumSpec.highlightAxisValues` when set). */
+  axisHighlights?: BuildStepAxisHighlight[];
 }
 
 export interface GraphPoint {
@@ -121,19 +137,31 @@ export interface GraphArrowStrokeGradient {
 
 export interface GraphArrowSpec {
   id: string;
-  from: GraphPoint;
-  to: GraphPoint;
+  from?: GraphPoint;
+  to?: GraphPoint;
+  /** With `followCurveId`, quantity (x when graph x = quantity); price (y) is resolved from the curve. */
+  fromQuantity?: number;
+  /** With `followCurveId`, quantity (x when graph x = quantity); price (y) is resolved from the curve. */
+  toQuantity?: number;
   label: string;
   calloutColorRole?: string;
   calloutColor?: string;
   strokeColorRole?: string;
   strokeColor?: string;
+  borderColorRole?: string;
+  borderColor?: string;
+  /** Override theme border width; use `0` for no outline. */
+  borderWidth?: number;
+  /** Override theme arrow fill opacity (1 = fully opaque). */
+  fillOpacity?: number;
   strokeGradient?: GraphArrowStrokeGradient;
   labelOffset?: GraphPoint;
-  /** Multiplier for arrow shaft/head thickness (default 1). */
+  /** Multiplier for arrow shaft/head width only, not length (default 1). */
   thicknessScale?: number;
   /** Bend the arrow along an existing chapter curve between `from` and `to`. */
   followCurveId?: string;
+  /** Draw this arrow beneath the curve with this id (e.g. `'demand'`). */
+  belowCurveId?: string;
 }
 
 export interface GraphCalloutSpec {

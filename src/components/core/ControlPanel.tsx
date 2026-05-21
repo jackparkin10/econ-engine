@@ -71,10 +71,14 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                 </span>
               </div>
               <p className="text-sm text-slate-700 font-medium mb-2">
-                {activeStep?.title ?? 'Ready to draw the demand curve'}
+                {activeStep?.title ??
+                  chapter.buildSteps?.[0]?.title ??
+                  'Ready to begin the build sequence'}
               </p>
               <p className="text-sm text-slate-600">
-                {activeStep?.description ?? 'Click Next to draw the first curve.'}
+                {activeStep?.description ??
+                  chapter.buildSteps?.[0]?.description ??
+                  'Click Next to reveal the first layer.'}
               </p>
               {activeStep?.visibleLayers?.length ? (
                 <div className="mt-4 space-y-2">
