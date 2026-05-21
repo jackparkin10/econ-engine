@@ -229,6 +229,7 @@ Import in chapter config: `bookView: { imageSrc, alt }`. Prefer **`bookBuildStep
 | Chapter file | Role |
 |--------------|------|
 | `increaseInSupplyChapter.ts` | Textbook axes, throughPoints, arrows, morph S₀→S₁, callouts |
+| `quantitySuppliedVsSupplyChapter.ts` | S₀/S₁/S₂ reference chart; along-curve vs shift arrows |
 | `chapters.ts` | Market equilibrium, build sequence, red equilibrium, explore surplus/shortage |
 | `elasticityChapter.ts` | Multiple demand curves, explore slider, textbook axes |
 

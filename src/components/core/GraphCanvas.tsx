@@ -107,6 +107,7 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
 
   const { displayCurves, equilibriaToRender } = useMemo(() => {
     const boundCurves = applyExploreBindings(chapter, baseCurves, exploreValues);
+    const curvesForEquilibrium = applyExploreBindings(chapter, chapter.curves, exploreValues);
 
     if (showSurplus || showShortage) {
       return { displayCurves: boundCurves, equilibriaToRender: [] as ResolvedEquilibrium[] };
@@ -117,9 +118,9 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
     if (chapter.equilibria?.length) {
       if (usesStepSnapshot && stepSnapshot?.showEquilibrium) {
         const ids = stepSnapshot.visibleEquilibria ?? chapter.equilibria.map((entry) => entry.id);
-        resolved = resolveEquilibria(chapter, boundCurves, ids);
+        resolved = resolveEquilibria(chapter, curvesForEquilibrium, ids);
       } else if (mode === 'explore') {
-        resolved = resolveEquilibria(chapter, boundCurves);
+        resolved = resolveEquilibria(chapter, curvesForEquilibrium);
       }
     } else {
       const point = chapter.equilibriumPoint ?? findEquilibrium(boundCurves, chapter);
@@ -173,6 +174,7 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
     (mode !== 'build' && !usesTeachingSnapshot) || Boolean(stepSnapshot?.showQuantityLine);
 
   const visibleArrowIds = useMemo(() => {
+    if (chapter.graphArrowsEnabled === false) return [];
     if (usesStepSnapshot && stepSnapshot?.visibleAnnotations?.length) {
       return stepSnapshot.visibleAnnotations;
     }
@@ -180,7 +182,7 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
       return chapter.graphArrows?.map((arrow) => arrow.id) ?? [];
     }
     return [];
-  }, [mode, usesStepSnapshot, stepSnapshot, chapter.graphArrows]);
+  }, [mode, usesStepSnapshot, stepSnapshot, chapter.graphArrows, chapter.graphArrowsEnabled]);
 
   const supplyDemandExploreIllustration = useMemo(() => {
     if (chapter.graphType !== 'supply-demand') return null;
@@ -394,6 +396,11 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
     );
   };
 
+  const arrowCalloutsEnabled =
+    usesStepSnapshot && stepSnapshot?.graphArrowCalloutsEnabled != null
+      ? stepSnapshot.graphArrowCalloutsEnabled
+      : chapter.graphArrowCalloutsEnabled !== false;
+
   const renderGraphArrow = (arrow: GraphArrowSpec) => {
     const endpoints = resolveGraphArrowEndpoints(arrow, displayCurves);
     const curved = arrow.followCurveId
@@ -407,6 +414,8 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
         )
       : null;
     const arrowFill = resolveArrowStroke(style, arrow);
+    const labelOffsetPoint =
+      mode === 'build' && arrow.labelOffsetBuild ? arrow.labelOffsetBuild : arrow.labelOffset;
 
     return (
       <GraphArrow
@@ -421,7 +430,8 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
         strokeGradient={resolveArrowGradient(style, arrow)}
         calloutFill={resolveCalloutFill(style, arrow)}
         labelStyle={style.calloutStyle}
-        labelOffset={arrow.labelOffset ? toPx(arrow.labelOffset) : undefined}
+        labelOffset={labelOffsetPoint ? toPx(labelOffsetPoint) : undefined}
+        showCallout={arrowCalloutsEnabled}
       />
     );
   };
@@ -621,6 +631,7 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
                 const showPoint = pointIds.includes(equilibrium.id);
                 const showPriceGuide = priceGuideIds.includes(equilibrium.id);
                 const showQuantityGuide = quantityGuideIds.includes(equilibrium.id);
+                const equilibriumSpec = chapter.equilibria?.find((entry) => entry.id === equilibrium.id);
 
                 return (
                   <g key={equilibrium.id}>
@@ -630,8 +641,10 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
                         cy={scales.yScale(equilibrium.point.y)}
                         r={theme.equilibrium.pointRadius}
                         fill={equilibrium.color ?? theme.equilibrium.pointFill}
-                        stroke={theme.equilibrium.pointStroke}
-                        strokeWidth={theme.equilibrium.pointStrokeWidth}
+                        stroke={equilibriumSpec?.pointStroke ?? theme.equilibrium.pointStroke}
+                        strokeWidth={
+                          equilibriumSpec?.pointStrokeWidth ?? theme.equilibrium.pointStrokeWidth
+                        }
                       />
                     ) : null}
                     {showPriceGuide ? (

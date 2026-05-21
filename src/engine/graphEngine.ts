@@ -344,6 +344,17 @@ export const resolveEquilibria = (
   for (const spec of chapter.equilibria) {
     if (!ids.includes(spec.id)) continue;
 
+    if (spec.point) {
+      const [x, y] = toPlotPoint(spec.point.x, spec.point.y, chapter);
+      resolved.push({
+        id: spec.id,
+        point: { x, y },
+        color: spec.color ?? chapter.themeColor,
+        label: spec.label,
+      });
+      continue;
+    }
+
     const demand = curveById.get(spec.demandCurveId);
     const supply = curveById.get(spec.supplyCurveId);
     if (!demand || !supply) continue;

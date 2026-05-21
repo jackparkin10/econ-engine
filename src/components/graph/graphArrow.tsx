@@ -86,6 +86,7 @@ interface GraphArrowProps {
   labelStyle: ResolvedTextStyle;
   calloutFill: string;
   labelOffset?: Point;
+  showCallout?: boolean;
 }
 
 export const GraphArrow: React.FC<GraphArrowProps> = ({
@@ -100,6 +101,7 @@ export const GraphArrow: React.FC<GraphArrowProps> = ({
   labelStyle,
   calloutFill,
   labelOffset,
+  showCallout = true,
 }) => {
   const thickness = arrow.thicknessScale ?? 1;
   const arrowStyle = {
@@ -164,7 +166,7 @@ export const GraphArrow: React.FC<GraphArrowProps> = ({
           </linearGradient>
         </defs>
       ) : null}
-      {connector ? (
+      {showCallout && connector ? (
         <line
           x1={calloutMid.x}
           y1={calloutMid.y}
@@ -208,41 +210,43 @@ export const GraphArrow: React.FC<GraphArrowProps> = ({
         strokeLinejoin="round"
         strokeLinecap="round"
       />
-      <g transform={`translate(${boxLeft}, ${boxTop})`}>
-        {theme.callout.shadow ? (
+      {showCallout ? (
+        <g transform={`translate(${boxLeft}, ${boxTop})`}>
+          {theme.callout.shadow ? (
+            <rect
+              x={-theme.callout.shadow.offsetX}
+              y={-theme.callout.shadow.offsetY}
+              width={boxWidth}
+              height={boxHeight}
+              rx={theme.callout.borderRadius}
+              fill={theme.callout.shadow.color}
+            />
+          ) : null}
           <rect
-            x={-theme.callout.shadow.offsetX}
-            y={-theme.callout.shadow.offsetY}
             width={boxWidth}
             height={boxHeight}
             rx={theme.callout.borderRadius}
-            fill={theme.callout.shadow.color}
+            fill={calloutFill}
+            stroke={theme.callout.borderWidth > 0 ? theme.callout.borderColor : 'none'}
+            strokeWidth={theme.callout.borderWidth}
           />
-        ) : null}
-        <rect
-          width={boxWidth}
-          height={boxHeight}
-          rx={theme.callout.borderRadius}
-          fill={calloutFill}
-          stroke={theme.callout.borderWidth > 0 ? theme.callout.borderColor : 'none'}
-          strokeWidth={theme.callout.borderWidth}
-        />
-        {lines.map((line, index) => (
-          <text
-            key={`${arrow.id}-line-${index}`}
-            x={textX}
-            y={padTop + labelStyle.fontSize + index * lineHeight}
-            textAnchor={textAnchor}
-            fontFamily={labelStyle.fontFamily}
-            fontSize={labelStyle.fontSize}
-            fontWeight={labelStyle.fontWeight}
-            fontStyle={labelStyle.fontStyle}
-            fill={labelStyle.fill}
-          >
-            {line}
-          </text>
-        ))}
-      </g>
+          {lines.map((line, index) => (
+            <text
+              key={`${arrow.id}-line-${index}`}
+              x={textX}
+              y={padTop + labelStyle.fontSize + index * lineHeight}
+              textAnchor={textAnchor}
+              fontFamily={labelStyle.fontFamily}
+              fontSize={labelStyle.fontSize}
+              fontWeight={labelStyle.fontWeight}
+              fontStyle={labelStyle.fontStyle}
+              fill={labelStyle.fill}
+            >
+              {line}
+            </text>
+          ))}
+        </g>
+      ) : null}
     </g>
   );
 };

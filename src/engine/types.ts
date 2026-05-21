@@ -78,6 +78,10 @@ export interface EquilibriumSpec {
   label?: string;
   /** Optional fixed equilibrium in Q–P space (used for non-linear curves). */
   point?: CurvePoint;
+  /** Override theme equilibrium dot outline color. */
+  pointStroke?: string;
+  /** Override theme equilibrium dot outline width. */
+  pointStrokeWidth?: number;
   /** When visible, label equilibrium Q/P on the axes in red; add P to y ticks if missing. */
   highlightAxisValues?: boolean;
 }
@@ -121,6 +125,8 @@ export interface BuildStep {
   quantityGuideEquilibria?: string[];
   /** Per-step axis tick highlights (overrides `EquilibriumSpec.highlightAxisValues` when set). */
   axisHighlights?: BuildStepAxisHighlight[];
+  /** When set, overrides `ChapterConfig.graphArrowCalloutsEnabled` for this step. */
+  graphArrowCalloutsEnabled?: boolean;
 }
 
 export interface GraphPoint {
@@ -156,6 +162,8 @@ export interface GraphArrowSpec {
   fillOpacity?: number;
   strokeGradient?: GraphArrowStrokeGradient;
   labelOffset?: GraphPoint;
+  /** Callout center in Q–P space when `StageMode` is `build`; falls back to `labelOffset`. */
+  labelOffsetBuild?: GraphPoint;
   /** Multiplier for arrow shaft/head width only, not length (default 1). */
   thicknessScale?: number;
   /** Bend the arrow along an existing chapter curve between `from` and `to`. */
@@ -217,6 +225,7 @@ export interface ExploreScenario {
 export interface ModeContent {
   book?: string;
   animate?: string;
+  build?: string;
 }
 
 /** Static textbook figure shown in Book mode (see src/assets/chapters/<chapter-id>/). */
@@ -265,6 +274,10 @@ export interface ChapterConfig {
   exploreScenarios?: ExploreScenario[];
   curveLabels?: CurveLabel[];
   graphArrows?: GraphArrowSpec[];
+  /** When `false`, hides all `graphArrows` (arrows and callout labels). Defaults to enabled. */
+  graphArrowsEnabled?: boolean;
+  /** When `false`, hides cream callout boxes and labels but keeps arrow shapes. Defaults to enabled. */
+  graphArrowCalloutsEnabled?: boolean;
   modeContent?: ModeContent;
   dataRows?: Record<string, string | number>[];
   mediaUrl?: string;

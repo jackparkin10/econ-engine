@@ -75,8 +75,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                   chapter.buildSteps?.[0]?.title ??
                   'Ready to begin the build sequence'}
               </p>
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-slate-600 whitespace-pre-line">
                 {activeStep?.description ??
+                  chapter.modeContent?.build ??
                   chapter.buildSteps?.[0]?.description ??
                   'Click Next to reveal the first layer.'}
               </p>

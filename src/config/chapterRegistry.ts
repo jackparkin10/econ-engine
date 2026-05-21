@@ -2,10 +2,12 @@ import { ChapterConfig } from '../engine/types';
 import { supplyDemandChapter } from './chapters';
 import { elasticityChapter } from './elasticityChapter';
 import { increaseInSupplyChapter } from './increaseInSupplyChapter';
+import { quantitySuppliedVsSupplyChapter } from './quantitySuppliedVsSupplyChapter';
 
 export const chapters: ChapterConfig[] = [
   supplyDemandChapter,
   increaseInSupplyChapter,
+  quantitySuppliedVsSupplyChapter,
   elasticityChapter,
 ];
 
