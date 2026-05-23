@@ -1,4 +1,4 @@
-import { quantityAtPrice } from '../curveIntersection';
+import { pointOnCurveAtPrice } from '../curveIntersection';
 import { ChapterConfig, CurveSpec, ExploreScenario } from '../types';
 
 export const supplyDemandScenarios: ExploreScenario[] = [
@@ -7,27 +7,31 @@ export const supplyDemandScenarios: ExploreScenario[] = [
     label: 'Surplus',
     description: 'Quantity supplied exceeds quantity demanded',
     pricePoint: 1.4,
-    calculateQd: (p: number, demandCurve: CurveSpec) => quantityOnCurve(demandCurve, p) ?? 0,
-    calculateQs: (p: number, supplyCurve: CurveSpec) => quantityOnCurve(supplyCurve, p) ?? 0,
+    calculateQd: (p: number, demandCurve: CurveSpec) => pointOnCurve(demandCurve, p)?.x ?? 0,
+    calculateQs: (p: number, supplyCurve: CurveSpec) => pointOnCurve(supplyCurve, p)?.x ?? 0,
   },
   {
     id: 'shortage',
     label: 'Shortage',
     description: 'Quantity demanded exceeds quantity supplied',
     pricePoint: 0.65,
-    calculateQd: (p: number, demandCurve: CurveSpec) => quantityOnCurve(demandCurve, p) ?? 0,
-    calculateQs: (p: number, supplyCurve: CurveSpec) => quantityOnCurve(supplyCurve, p) ?? 0,
+    calculateQd: (p: number, demandCurve: CurveSpec) => pointOnCurve(demandCurve, p)?.x ?? 0,
+    calculateQs: (p: number, supplyCurve: CurveSpec) => pointOnCurve(supplyCurve, p)?.x ?? 0,
   },
 ];
 
-const quantityOnCurve = (curve: CurveSpec, price: number): number | null => {
+const pointOnCurve = (
+  curve: CurveSpec,
+  price: number
+): { x: number; y: number } | null => {
   if (curve.curveType === 'throughPoints' && curve.params.points?.length) {
-    return quantityAtPrice(curve.params.points, price);
+    return pointOnCurveAtPrice(curve.params.points, price);
   }
   const m = curve.params.slope;
   if (m === undefined || m === 0) return null;
   const b = curve.params.intercept ?? 0;
-  return (price - b) / m;
+  const x = (price - b) / m;
+  return { x, y: price };
 };
 
 const findDemandCurve = (chapter: ChapterConfig) =>
@@ -47,12 +51,13 @@ export function renderExploreIllustration(
   if (!supplyCurve || !demandCurve) return null;
 
   const price = scenario.pricePoint;
-  const supplyX = scenario.calculateQs(price, supplyCurve);
-  const demandX = scenario.calculateQd(price, demandCurve);
+  const supplyPoint = pointOnCurve(supplyCurve, price);
+  const demandPoint = pointOnCurve(demandCurve, price);
+  if (!supplyPoint || !demandPoint) return null;
 
   return {
     price,
-    supply: { x: supplyX, y: price },
-    demand: { x: demandX, y: price },
+    supply: supplyPoint,
+    demand: demandPoint,
   };
 }

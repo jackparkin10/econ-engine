@@ -46,6 +46,8 @@ export interface GraphThemeConfig {
     pointStrokeWidth: number;
     guideStrokeWidth: number;
     guideDasharray: string;
+    /** Round caps with `0, <spacing>` dasharray render guides as dotted lines. */
+    guideStrokeLinecap?: 'round' | 'butt';
     defaultGuideColorRole: string;
   };
   arrow: {

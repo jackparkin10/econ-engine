@@ -10,7 +10,7 @@ export const supplyDemandChapter: ChapterConfig = {
   graphThemeId: 'textbook',
   graphLayout: { equalAxisLengths: true },
   graphType: 'supply-demand',
-  bookBuildStepId: 'step-6',
+  bookBuildStepId: 'step-5',
   showTable: false,
   tablePosition: 'none',
   xAxis: {
@@ -40,6 +40,43 @@ export const supplyDemandChapter: ChapterConfig = {
     },
   ],
   exploreLayers: ['demand', 'supply-initial'],
+  graphArrows: [
+    {
+      id: 'market-equilibrium',
+      from: { x: 10, y: 1 },
+      to: { x: 10, y: 1 },
+      label: 'Market\nequilibrium',
+      calloutColorRole: 'calloutCream',
+      fillOpacity: 0,
+      borderWidth: 0,
+      labelOffset: { x: 11.5, y: 1.1 },
+      labelOffsetBuild: { x: 11.5, y: 1.1 },
+    },
+    {
+      id: 'equilibrium-price',
+      from: { x: 7, y: 1 },
+      to: { x: 7, y: 1 },
+      label: 'Equilibrium\nprice',
+      calloutColorRole: 'calloutCream',
+      strokeColor: '#000000',
+      fillOpacity: 0,
+      borderWidth: 0,
+      labelOffset: { x: 8, y: 1.25 },
+      labelOffsetBuild: { x: 8, y: 1.25 },
+    },
+    {
+      id: 'equilibrium-quantity',
+      from: { x: 10, y: 0 },
+      to: { x: 10, y: 0 },
+      label: 'Equilibrium\nquantity',
+      calloutColorRole: 'calloutCream',
+      strokeColor: '#000000',
+      fillOpacity: 0,
+      borderWidth: 0,
+      labelOffset: { x: 9, y: 0.25 },
+      labelOffsetBuild: { x: 9, y: 0.25 },
+    },
+  ],
   curves: [
     {
       id: 'demand',
@@ -63,7 +100,7 @@ export const supplyDemandChapter: ChapterConfig = {
       curveType: 'throughPoints',
       params: {
         points: [
-          { x: 9, y: 0.75 },
+          { x: 8, y: 0.5 },
           { x: 10, y: 1 },
           { x: 11.5, y: 1.8 },
         ],
@@ -76,57 +113,61 @@ export const supplyDemandChapter: ChapterConfig = {
   buildSteps: [
     {
       id: 'step-1',
-      title: 'Step 1: Prepare the graph',
-      description: 'Start with the axes only. Click Next when you are ready to draw the demand curve.',
-      visibleLayers: [],
-    },
-    {
-      id: 'step-2',
-      title: 'Step 2: Draw the Demand Curve',
+      title: 'Step 1: Draw the Demand Curve',
       description:
         'Draw the demand curve. This shows the relationship between price and quantity demanded.',
       visibleLayers: ['demand'],
     },
     {
-      id: 'step-3',
-      title: 'Step 3: Draw the Supply Curve',
+      id: 'step-2',
+      title: 'Step 2: Draw the Supply Curve',
       description:
         'Add the supply curve. This shows the relationship between price and quantity supplied.',
       visibleLayers: ['demand', 'supply-initial'],
     },
     {
-      id: 'step-4',
-      title: 'Step 4: Highlight the Equilibrium Point',
+      id: 'step-3',
+      title: 'Step 3: Highlight the Equilibrium Point',
       description: 'The equilibrium point is where supply and demand intersect. This is where the market clears.',
       visibleLayers: ['demand', 'supply-initial'],
       showEquilibrium: true,
       visibleEquilibria: ['equilibrium'],
+      visibleAnnotations: ['market-equilibrium'],
     },
     {
-      id: 'step-5',
-      title: 'Step 5: Draw Price Line',
-      description: 'Draw a line from the equilibrium point to the Y-axis to show the equilibrium price (P).',
+      id: 'step-4',
+      title: 'Step 4: Draw Price Line',
+      description:
+        'Draw a line from the equilibrium point to the Y-axis to show the equilibrium price (P).\n\nP = 1',
       visibleLayers: ['demand', 'supply-initial'],
       showEquilibrium: true,
       visibleEquilibria: ['equilibrium'],
       showPriceLine: true,
+      visibleAnnotations: ['market-equilibrium', 'equilibrium-price'],
     },
     {
-      id: 'step-6',
-      title: 'Step 6: Draw Quantity Line',
+      id: 'step-5',
+      title: 'Step 5: Draw Quantity Line',
       description:
-        'Draw a line from the equilibrium point to the X-axis to show the equilibrium quantity (Q).',
+        'Draw a line from the equilibrium point to the X-axis to show the equilibrium quantity (Q).\n\nQ = 10',
       visibleLayers: ['demand', 'supply-initial'],
       showEquilibrium: true,
       visibleEquilibria: ['equilibrium'],
       showPriceLine: true,
       showQuantityLine: true,
+      visibleAnnotations: ['market-equilibrium', 'equilibrium-price', 'equilibrium-quantity'],
     },
   ],
   animationSteps: [
     { id: 'animate-1', title: 'Demand enters', durationMs: 1200, layerIds: ['demand'] },
     { id: 'animate-2', title: 'Supply enters', durationMs: 1200, layerIds: ['supply-initial'] },
-    { id: 'animate-3', title: 'Equilibrium appears', durationMs: 1000, layerIds: ['demand', 'supply-initial'] },
+    {
+      id: 'animate-3',
+      title: 'Equilibrium appears',
+      durationMs: 1000,
+      layerIds: ['demand', 'supply-initial'],
+      annotationIds: ['market-equilibrium'],
+    },
   ],
   exploreControls: [
     {
@@ -146,11 +187,15 @@ export const supplyDemandChapter: ChapterConfig = {
   ],
   exploreScenarios: supplyDemandScenarios,
   curveLabels: [
-    { curveId: 'demand', text: 'D', x: 12.3, y: 0.52, anchor: 'start', offsetX: 0.22 },
-    { curveId: 'supply-initial', text: 'S', x: 11.5, y: 1.75, anchor: 'start', offsetX: 0.22 },
+    { curveId: 'demand', text: 'Demand', x: 12.3, y: 0.52, anchor: 'start', offsetX: 0.22 },
+    { curveId: 'supply-initial', text: 'Supply', x: 11.5, y: 1.75, anchor: 'start', offsetX: 0.22 },
   ],
   modeContent: {
-    book: 'Explore supply and demand interactions through an interactive economics chapter with build, animation, and sandbox modes.',
+    bookNotes: [
+      'Market equilibrium occurs at the intersection of the demand curve and the supply curve.',
+      'The equilibrium price is $1.00 a bottle.',
+      'At the equilibrium price, the quantity demanded and the quantity supplied are 10 million bottles a day, which is the equilibrium quantity.',
+    ],
   },
   dataRows: [
     { value: 10, demand: 80, supply: 20 },

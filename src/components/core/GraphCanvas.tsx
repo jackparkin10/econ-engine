@@ -175,6 +175,9 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
 
   const visibleArrowIds = useMemo(() => {
     if (chapter.graphArrowsEnabled === false) return [];
+    if (mode === 'explore' && (showSurplus || showShortage)) {
+      return [];
+    }
     if (usesStepSnapshot && stepSnapshot?.visibleAnnotations?.length) {
       return stepSnapshot.visibleAnnotations;
     }
@@ -182,7 +185,15 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
       return chapter.graphArrows?.map((arrow) => arrow.id) ?? [];
     }
     return [];
-  }, [mode, usesStepSnapshot, stepSnapshot, chapter.graphArrows, chapter.graphArrowsEnabled]);
+  }, [
+    mode,
+    usesStepSnapshot,
+    stepSnapshot,
+    chapter.graphArrows,
+    chapter.graphArrowsEnabled,
+    showSurplus,
+    showShortage,
+  ]);
 
   const supplyDemandExploreIllustration = useMemo(() => {
     if (chapter.graphType !== 'supply-demand') return null;
@@ -264,6 +275,10 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
   });
 
   const exploreAccent = style.resolveColor('explore');
+  const exploreScenarioDotFill = style.resolveColor('supplyInitial');
+  const exploreScenarioDotStroke = theme.equilibrium.pointStroke;
+  const exploreScenarioDotStrokeWidth = theme.equilibrium.pointStrokeWidth;
+  const exploreScenarioDotRadius = theme.equilibrium.pointRadius;
 
   const morphPairs = useMemo(
     () =>
@@ -550,8 +565,10 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
               <circle
                 cx={scales.xScale(supplyDemandExploreIllustration.demand.x)}
                 cy={scales.yScale(supplyDemandExploreIllustration.demand.y)}
-                r={5}
-                fill={exploreAccent}
+                r={exploreScenarioDotRadius}
+                fill={exploreScenarioDotFill}
+                stroke={exploreScenarioDotStroke}
+                strokeWidth={exploreScenarioDotStrokeWidth}
               />
               <line
                 x1={scales.xScale(supplyDemandExploreIllustration.supply.x)}
@@ -565,8 +582,10 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
               <circle
                 cx={scales.xScale(supplyDemandExploreIllustration.supply.x)}
                 cy={scales.yScale(supplyDemandExploreIllustration.supply.y)}
-                r={5}
-                fill={exploreAccent}
+                r={exploreScenarioDotRadius}
+                fill={exploreScenarioDotFill}
+                stroke={exploreScenarioDotStroke}
+                strokeWidth={exploreScenarioDotStrokeWidth}
               />
             </>
           ) : null}
@@ -656,6 +675,7 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
                         stroke={equilibrium.color}
                         strokeWidth={theme.equilibrium.guideStrokeWidth}
                         strokeDasharray={theme.equilibrium.guideDasharray}
+                        strokeLinecap={theme.equilibrium.guideStrokeLinecap ?? 'butt'}
                       />
                     ) : null}
                     {showQuantityGuide ? (
@@ -667,6 +687,7 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({ chapter, mode = 'book', activ
                         stroke={equilibrium.color}
                         strokeWidth={theme.equilibrium.guideStrokeWidth}
                         strokeDasharray={theme.equilibrium.guideDasharray}
+                        strokeLinecap={theme.equilibrium.guideStrokeLinecap ?? 'butt'}
                       />
                     ) : null}
                   </g>

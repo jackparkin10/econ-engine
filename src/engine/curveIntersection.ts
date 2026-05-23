@@ -161,6 +161,34 @@ export const priceAtQuantity = (points: CurvePoint[], quantity: number): number 
   return null;
 };
 
+/** Quantity (x) on the rendered Catmull–Rom spline at a given price (y). */
+export const quantityAtPriceOnSpline = (points: CurvePoint[], price: number): number | null => {
+  const samples = sampleCatmullRom(points);
+  if (samples.length < 2) return null;
+
+  for (let i = 0; i < samples.length - 1; i++) {
+    const a = samples[i];
+    const b = samples[i + 1];
+    const minY = Math.min(a.y, b.y);
+    const maxY = Math.max(a.y, b.y);
+    if (price < minY - 1e-9 || price > maxY + 1e-9) continue;
+    if (Math.abs(b.y - a.y) < 1e-9) return (a.x + b.x) / 2;
+    const t = (price - a.y) / (b.y - a.y);
+    return a.x + t * (b.x - a.x);
+  }
+
+  return null;
+};
+
+/** Q–P point on the rendered Catmull–Rom spline at a given price (y). */
+export const pointOnCurveAtPrice = (points: CurvePoint[], price: number): Point | null => {
+  const x = quantityAtPriceOnSpline(points, price);
+  if (x == null) return null;
+  const y = priceAtQuantity(points, x);
+  if (y == null) return null;
+  return { x, y };
+};
+
 /** Quantity (x) on a piecewise-linear path through control points at a given price (y). */
 export const quantityAtPrice = (points: CurvePoint[], price: number): number | null => {
   if (points.length < 2) return null;

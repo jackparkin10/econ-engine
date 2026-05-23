@@ -172,9 +172,17 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
 
         {mode === 'book' ? (
           <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600 space-y-3">
-            <p>
-              {chapter.modeContent?.book || chapter.description}
-            </p>
+            {chapter.modeContent?.bookNotes?.length ? (
+              <ol className="list-decimal list-outside pl-5 space-y-2">
+                {chapter.modeContent.bookNotes.map((note) => (
+                  <li key={note}>{note}</li>
+                ))}
+              </ol>
+            ) : (
+              <p className="whitespace-pre-line">
+                {chapter.modeContent?.book || chapter.description}
+              </p>
+            )}
           </div>
         ) : null}
 

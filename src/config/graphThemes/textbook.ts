@@ -63,8 +63,9 @@ export const textbookGraphTheme: GraphThemeConfig = {
     pointFill: '#000000',
     pointStroke: '#ffffff',
     pointStrokeWidth: 1.5,
-    guideStrokeWidth: 1.5,
-    guideDasharray: '5 4',
+    guideStrokeWidth: 2,
+    guideDasharray: '0, 6',
+    guideStrokeLinecap: 'round',
     defaultGuideColorRole: 'equilibrium',
   },
   arrow: {

@@ -224,6 +224,8 @@ export interface ExploreScenario {
 
 export interface ModeContent {
   book?: string;
+  /** Numbered chapter notes shown in Book mode when set (overrides `book` for display). */
+  bookNotes?: string[];
   animate?: string;
   build?: string;
 }
